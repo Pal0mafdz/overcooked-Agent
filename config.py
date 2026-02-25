@@ -18,6 +18,7 @@ COLOR_LAVA_PLATOS = (132, 149, 113)
 COLOR_BASURA = (73, 110, 39)
 COLOR_ENTREGA = (146, 127, 121)
 COLOR_RECOGE_PLATOS = (41, 29, 36)
+COLOR_PLATO = (255,255,240)
 
 
 def dibujar_objetivos(ventana, tam_celda):
@@ -32,3 +33,6 @@ def dibujar_objetivos(ventana, tam_celda):
     pygame.draw.rect(ventana, COLOR_ENTREGA, (17 * tam_celda, 4 * tam_celda, tam_celda, tam_celda))
     pygame.draw.rect(ventana, COLOR_ENTREGA, (17 * tam_celda, 5 * tam_celda, tam_celda, tam_celda))
     pygame.draw.rect(ventana, COLOR_RECOGE_PLATOS, (17 * tam_celda, 6 * tam_celda, tam_celda, tam_celda))
+    pygame.draw.rect(ventana, COLOR_PLATO, (12 * tam_celda, 2 * tam_celda, tam_celda, tam_celda))
+    pygame.draw.rect(ventana, COLOR_PLATO, (13 * tam_celda, 2 * tam_celda, tam_celda, tam_celda))
+    pygame.draw.rect(ventana, COLOR_PLATO, (14 * tam_celda, 2 * tam_celda, tam_celda, tam_celda))

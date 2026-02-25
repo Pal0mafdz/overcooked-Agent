@@ -2,8 +2,8 @@ import copy
 import pygame
 
 from config import TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO
-from src.systems.maps import MAPA_ORIGINAL, generar_pozo_y_olores
-from src.systems.orders import generar_pedidos, expandir_objetivos
+from src.systems.maps import MAPA_ORIGINAL, generar_pozos_y_olores
+from src.systems.orders import PLATOS, generar_pedidos, expandir_objetivos
 from src.systems.pathfinding import Pathfinder
 from src.ui.render import render_frame
 
@@ -25,12 +25,20 @@ class GameScene:
         lista_pedidos = generar_pedidos(self.ordenes)
         lista_objetivos = expandir_objetivos(lista_pedidos)
 
-        pozo_pos, zonas_olor = generar_pozo_y_olores(mapa_actual, chef_pos, lista_objetivos)
-        pozo_descubierto = False
+        pozos_pos, zonas_olor = generar_pozos_y_olores(
+            mapa_actual,
+            chef_pos,
+            lista_objetivos,
+            cantidad_pozos=2,
+            celdas_prohibidas=PLATOS,
+        )
+        for (px, py) in pozos_pos:
+            mapa_actual[py][px] = 0
+        pozo_descubierto = True
 
         print("\n" + "=" * 40)
         print("NUEVA SIMULACIÓN INICIADA")
-        print(f"DEBUG: Pozo oculto generado en {pozo_pos}")
+        print(f"DEBUG: Pozos generados en {pozos_pos}")
         if lista_pedidos:
             print(f"Pedidos: {lista_pedidos}")
             print(f"Pedido actual: {lista_pedidos[0]}")
@@ -64,14 +72,6 @@ class GameScene:
                                 chef_pos = [cx, cy]
                                 ruta_disponible = []
                                 ruta_objetivo = None
-
-            if not pozo_descubierto and tuple(chef_pos) in zonas_olor:
-                print(f"¡Olor detectado en {chef_pos}! Registrando pozo en {pozo_pos}.")
-                pozo_descubierto = True
-                mapa_actual[pozo_pos[1]][pozo_pos[0]] = 0
-                pathfinder.set_matrix(mapa_actual)
-                ruta_disponible = []
-                ruta_objetivo = None
 
             while objetivo_actual is not None and tuple(chef_pos) == objetivo_actual:
                 index_objetivo += 1
@@ -118,7 +118,7 @@ class GameScene:
                 ruta_disponible,
                 zonas_olor,
                 pozo_descubierto,
-                pozo_pos,
+                pozos_pos,
             )
             pygame.display.flip()
             self.reloj.tick(60)

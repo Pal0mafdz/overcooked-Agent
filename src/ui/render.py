@@ -20,7 +20,7 @@ def render_frame(
     ruta_disponible: list[tuple[int, int]],
     zonas_olor: list[tuple[int, int]],
     pozo_descubierto: bool,
-    pozo_pos: tuple[int, int],
+    pozos_pos: list[tuple[int, int]],
 ):
     ventana.fill((0, 0, 0))
 
@@ -41,11 +41,12 @@ def render_frame(
         )
 
     if pozo_descubierto:
-        pygame.draw.rect(
-            ventana,
-            (0, 0, 0),
-            (pozo_pos[0] * tam_celda + 10, pozo_pos[1] * tam_celda + 10, tam_celda - 20, tam_celda - 20),
-        )
+        for (px, py) in pozos_pos:
+            pygame.draw.rect(
+                ventana,
+                (0, 0, 0),
+                (px * tam_celda + 10, py * tam_celda + 10, tam_celda - 20, tam_celda - 20),
+            )
 
     for rx, ry in ruta_disponible:
         pygame.draw.rect(ventana, COLOR_RUTA, (rx * tam_celda + 2, ry * tam_celda, 60, 60))
