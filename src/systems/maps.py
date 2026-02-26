@@ -14,7 +14,6 @@ MAPA_ORIGINAL = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 ]
 
-
 def generar_pozo_y_olores(mapa: list[list[int]], chef_pos: list[int], objetivos: list[tuple[int, int]]):
     celdas_libres = []
     for y in range(len(mapa)):
