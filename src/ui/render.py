@@ -21,8 +21,13 @@ def render_frame(
     zonas_olor: list[tuple[int, int]],
     pozo_descubierto: bool,
     pozos_pos: list[tuple[int, int]],
+    platos_limpios: int,
+    platos_sucios: int,
+    lavando_plato: bool,
+    progreso_lavado: float,
 ):
     ventana.fill((0, 0, 0))
+    fuente_coord = pygame.font.SysFont(None, 20)
 
     for fila in range(alto_grid):
         for col in range(ancho_grid):
@@ -30,6 +35,22 @@ def render_frame(
             color_celda = COLOR_SUELO if mapa_actual[fila][col] == 1 else COLOR_MURO
             pygame.draw.rect(ventana, color_celda, (x, y, tam_celda, tam_celda))
             pygame.draw.rect(ventana, COLOR_REJILLA, (x, y, tam_celda, tam_celda), 1)
+
+    for col in range(ancho_grid):
+        texto_col = fuente_coord.render(str(col), True, (255, 255, 255))
+        x_col = col * tam_celda + (tam_celda - texto_col.get_width()) // 2
+        ventana.blit(texto_col, (x_col, 2))
+
+    for fila in range(alto_grid):
+        texto_fila = fuente_coord.render(str(fila), True, (255, 255, 255))
+        y_fila = fila * tam_celda + (tam_celda - texto_fila.get_height()) // 2
+        ventana.blit(texto_fila, (4, y_fila))
+
+    texto_limpios = fuente_coord.render(f"L:{platos_limpios}", True, (200, 240, 255))
+    ventana.blit(texto_limpios, (12 * tam_celda + 4, 2 * tam_celda + 4))
+
+    texto_sucios = fuente_coord.render(f"S:{platos_sucios}", True, (255, 220, 150))
+    ventana.blit(texto_sucios, (16 * tam_celda + 4, 6 * tam_celda + 4))
 
     dibujar_objetivos(ventana, tam_celda)
 
@@ -53,3 +74,12 @@ def render_frame(
 
     centro_chef = (chef_pos[0] * tam_celda + tam_celda // 2, chef_pos[1] * tam_celda + tam_celda // 2)
     pygame.draw.circle(ventana, COLOR_CHEF, centro_chef, 22)
+
+    if lavando_plato:
+        barra_x = 0 * tam_celda + 6
+        barra_y = 6 * tam_celda + tam_celda - 14
+        barra_w = tam_celda - 12
+        barra_h = 8
+        pygame.draw.rect(ventana, (40, 40, 40), (barra_x, barra_y, barra_w, barra_h))
+        pygame.draw.rect(ventana, (120, 220, 120), (barra_x, barra_y, int(barra_w * progreso_lavado), barra_h))
+        pygame.draw.rect(ventana, (220, 220, 220), (barra_x, barra_y, barra_w, barra_h), 1)
