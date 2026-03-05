@@ -13,6 +13,16 @@ class GameScene:
         self.ventana = ventana
         self.reloj = reloj
         self.ordenes = ordenes
+        
+        # --- CARGAR IMÁGENES ---
+        self.img_escenario = pygame.image.load("assets/escenario.jpeg").convert()
+        self.img_escenario = pygame.transform.scale(
+            self.img_escenario, 
+            (ANCHO_GRID * TAM_CELDA, ALTO_GRID * TAM_CELDA)
+        )
+        
+        self.img_chef = pygame.image.load("assets/chef01_front.png").convert_alpha()
+        self.img_chef = pygame.transform.scale(self.img_chef, (TAM_CELDA, TAM_CELDA))
 
     def run(self) -> bool:
         mapa_actual = copy.deepcopy(MAPA_ORIGINAL)
@@ -119,6 +129,8 @@ class GameScene:
                 zonas_olor,
                 pozo_descubierto,
                 pozos_pos,
+                img_escenario=self.img_escenario, 
+                img_chef=self.img_chef            
             )
             pygame.display.flip()
             self.reloj.tick(60)
