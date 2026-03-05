@@ -1,18 +1,32 @@
 import copy
 import pygame
 
-from config import TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO
+from config import TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO, TIEMPOS_ESPERA
 from src.systems.maps import MAPA_ORIGINAL, generar_pozos_y_olores
 from src.systems.orders import PLATOS, ENTREGAS, generar_pedidos, expandir_objetivos
 from src.systems.pathfinding import Pathfinder
 from src.ui.render import render_frame
-
 
 class GameScene:
     def __init__(self, ventana, reloj, ordenes: int):
         self.ventana = ventana
         self.reloj = reloj
         self.ordenes = ordenes
+        
+        # --- NUEVO: PANTALLA VIRTUAL ---
+        self.ancho_logico = ANCHO_GRID * TAM_CELDA
+        self.alto_logico = ALTO_GRID * TAM_CELDA
+        self.pantalla_virtual = pygame.Surface((self.ancho_logico, self.alto_logico))
+        
+        # --- CARGAR IMÁGENES ---
+        self.img_escenario = pygame.image.load("assets/escenario_2.jpg").convert()
+        self.img_escenario = pygame.transform.scale(
+            self.img_escenario, 
+            (self.ancho_logico, self.alto_logico)
+        )
+        
+        self.img_chef = pygame.image.load("assets/chef01_front.png").convert_alpha()
+        self.img_chef = pygame.transform.scale(self.img_chef, (TAM_CELDA, TAM_CELDA))
 
     def run(self) -> bool:
         objetivo_platos_sucios = (16, 6)
@@ -53,14 +67,6 @@ class GameScene:
         for (px, py) in pozos_pos:
             mapa_actual[py][px] = 0
         pozo_descubierto = True
-
-        print("\n" + "=" * 40)
-        print("NUEVA SIMULACIÓN INICIADA")
-        print(f"DEBUG: Pozos generados en {pozos_pos}")
-        if lista_pedidos:
-            print(f"Pedidos: {lista_pedidos}")
-            print(f"Pedido actual: {lista_pedidos[0]}")
-        print("=" * 40 + "\n")
 
         pathfinder = Pathfinder(mapa_actual)
 
@@ -116,7 +122,11 @@ class GameScene:
 
                 if evento.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = pygame.mouse.get_pos()
-                    cx, cy = mx // TAM_CELDA, my // TAM_CELDA
+                    
+                    mx_real = int(mx * self.ancho_logico / 950)
+                    my_real = int(my * self.alto_logico / 650)
+                    
+                    cx, cy = mx_real // TAM_CELDA, my_real // TAM_CELDA
                     if 0 <= cx < ANCHO_GRID and 0 <= cy < ALTO_GRID:
                         if mapa_actual[cy][cx] == 1:
                             if evento.button == 3:
@@ -215,7 +225,7 @@ class GameScene:
                             ruta_objetivo = None
 
             render_frame(
-                self.ventana,
+                self.pantalla_virtual, 
                 TAM_CELDA,
                 ANCHO_GRID,
                 ALTO_GRID,
@@ -230,6 +240,11 @@ class GameScene:
                 lavando_plato,
                 progreso_lavado,
             )
+            
+            superficie_escalada = pygame.transform.smoothscale(self.pantalla_virtual, (950, 650))
+            
+            self.ventana.blit(superficie_escalada, (0, 0))
+            
             pygame.display.flip()
             self.reloj.tick(60)
 
