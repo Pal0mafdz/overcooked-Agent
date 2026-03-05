@@ -6,6 +6,7 @@ from src.systems.maps import MAPA_ORIGINAL, generar_pozos_y_olores
 from src.systems.orders import PLATOS, ENTREGAS, generar_pedidos, expandir_objetivos
 from src.systems.pathfinding import Pathfinder
 from src.ui.render import render_frame
+from src.systems.maps import generar_pisos_lentos
 
 class GameScene:
     def __init__(self, ventana, reloj, ordenes: int):
@@ -67,6 +68,35 @@ class GameScene:
         for (px, py) in pozos_pos:
             mapa_actual[py][px] = 0
         pozo_descubierto = True
+
+        pisos_lentos = generar_pisos_lentos(
+            mapa_actual,
+            chef_pos,
+            lista_objetivos,
+            cantidad=8,
+            celdas_prohibidas=PLATOS,
+        )
+
+  
+        zona_lenta = set()
+
+        for (x, y) in pisos_lentos:
+            zona_lenta.add((x, y))
+
+            for dx, dy in [(0,1),(0,-1),(1,0),(-1,0)]:
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < ANCHO_GRID and 0 <= ny < ALTO_GRID:
+                    zona_lenta.add((nx, ny))
+
+
+        print("Zonas de piso lento", zona_lenta)
+        print("\n" + "=" * 40)
+        print("NUEVA SIMULACIÓN INICIADA")
+        print(f"DEBUG: Pozos generados en {pozos_pos}")
+        if lista_pedidos:
+            print(f"Pedidos: {lista_pedidos}")
+            print(f"Pedido actual: {lista_pedidos[0]}")
+        print("=" * 40 + "\n")
 
         pathfinder = Pathfinder(mapa_actual)
 
@@ -212,9 +242,14 @@ class GameScene:
                     ruta_objetivo = None
                     ruta_disponible = []
 
-            if ruta_disponible and not lavando_plato:
+                 
+        
+            if ruta_disponible:
                 contador_frames += 1
-                if contador_frames >= VELOCIDAD_MOVIMIENTO:
+                velcodad_actual = VELOCIDAD_MOVIMIENTO
+                if tuple(chef_pos) in zona_lenta:
+                    velcodad_actual = VELOCIDAD_MOVIMIENTO * 3
+                if contador_frames >= velcodad_actual:
                     siguiente_paso = ruta_disponible.pop(0)
                     chef_pos[0], chef_pos[1] = siguiente_paso[0], siguiente_paso[1]
                     contador_frames = 0
@@ -235,10 +270,7 @@ class GameScene:
                 zonas_olor,
                 pozo_descubierto,
                 pozos_pos,
-                platos_limpios,
-                platos_sucios,
-                lavando_plato,
-                progreso_lavado,
+                pisos_lentos,
             )
             
             superficie_escalada = pygame.transform.smoothscale(self.pantalla_virtual, (950, 650))

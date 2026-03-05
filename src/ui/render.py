@@ -21,10 +21,8 @@ def render_frame(
     zonas_olor: list[tuple[int, int]],
     pozo_descubierto: bool,
     pozos_pos: list[tuple[int, int]],
-    platos_limpios: int,
-    platos_sucios: int,
-    lavando_plato: bool,
-    progreso_lavado: float,
+    pisos_lentos: list[tuple[int, int]],
+
 ):
     ventana.fill((0, 0, 0))
     fuente_coord = pygame.font.SysFont(None, 20)
@@ -36,21 +34,13 @@ def render_frame(
             pygame.draw.rect(ventana, color_celda, (x, y, tam_celda, tam_celda))
             pygame.draw.rect(ventana, COLOR_REJILLA, (x, y, tam_celda, tam_celda), 1)
 
-    for col in range(ancho_grid):
-        texto_col = fuente_coord.render(str(col), True, (255, 255, 255))
-        x_col = col * tam_celda + (tam_celda - texto_col.get_width()) // 2
-        ventana.blit(texto_col, (x_col, 2))
 
-    for fila in range(alto_grid):
-        texto_fila = fuente_coord.render(str(fila), True, (255, 255, 255))
-        y_fila = fila * tam_celda + (tam_celda - texto_fila.get_height()) // 2
-        ventana.blit(texto_fila, (4, y_fila))
-
-    texto_limpios = fuente_coord.render(f"L:{platos_limpios}", True, (200, 240, 255))
-    ventana.blit(texto_limpios, (12 * tam_celda + 4, 2 * tam_celda + 4))
-
-    texto_sucios = fuente_coord.render(f"S:{platos_sucios}", True, (255, 220, 150))
-    ventana.blit(texto_sucios, (16 * tam_celda + 4, 6 * tam_celda + 4))
+    for (x, y) in pisos_lentos:
+        pygame.draw.rect(
+            ventana,
+            (100, 180, 255), 
+            (x * tam_celda, y * tam_celda, tam_celda, tam_celda),
+     )
 
     dibujar_objetivos(ventana, tam_celda)
 
