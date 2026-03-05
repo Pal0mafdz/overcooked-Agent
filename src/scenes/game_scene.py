@@ -1,12 +1,11 @@
 import copy
 import pygame
 
-from config import TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO
+from config import TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO, TIEMPOS_ESPERA
 from src.systems.maps import MAPA_ORIGINAL, generar_pozos_y_olores
 from src.systems.orders import PLATOS, generar_pedidos, expandir_objetivos
 from src.systems.pathfinding import Pathfinder
 from src.ui.render import render_frame
-
 
 class GameScene:
     def __init__(self, ventana, reloj, ordenes: int):
@@ -14,11 +13,16 @@ class GameScene:
         self.reloj = reloj
         self.ordenes = ordenes
         
+        # --- NUEVO: PANTALLA VIRTUAL ---
+        self.ancho_logico = ANCHO_GRID * TAM_CELDA
+        self.alto_logico = ALTO_GRID * TAM_CELDA
+        self.pantalla_virtual = pygame.Surface((self.ancho_logico, self.alto_logico))
+        
         # --- CARGAR IMÁGENES ---
-        self.img_escenario = pygame.image.load("assets/escenario.jpeg").convert()
+        self.img_escenario = pygame.image.load("assets/escenario_2.jpg").convert()
         self.img_escenario = pygame.transform.scale(
             self.img_escenario, 
-            (ANCHO_GRID * TAM_CELDA, ALTO_GRID * TAM_CELDA)
+            (self.ancho_logico, self.alto_logico)
         )
         
         self.img_chef = pygame.image.load("assets/chef01_front.png").convert_alpha()
@@ -46,15 +50,10 @@ class GameScene:
             mapa_actual[py][px] = 0
         pozo_descubierto = True
 
-        print("\n" + "=" * 40)
-        print("NUEVA SIMULACIÓN INICIADA")
-        print(f"DEBUG: Pozos generados en {pozos_pos}")
-        if lista_pedidos:
-            print(f"Pedidos: {lista_pedidos}")
-            print(f"Pedido actual: {lista_pedidos[0]}")
-        print("=" * 40 + "\n")
-
         pathfinder = Pathfinder(mapa_actual)
+
+        esperando_accion = False
+        tiempo_fin_espera = 0
 
         ejecutando = True
         while ejecutando:
@@ -75,7 +74,11 @@ class GameScene:
 
                 if evento.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = pygame.mouse.get_pos()
-                    cx, cy = mx // TAM_CELDA, my // TAM_CELDA
+                    
+                    mx_real = int(mx * self.ancho_logico / 950)
+                    my_real = int(my * self.alto_logico / 650)
+                    
+                    cx, cy = mx_real // TAM_CELDA, my_real // TAM_CELDA
                     if 0 <= cx < ANCHO_GRID and 0 <= cy < ALTO_GRID:
                         if mapa_actual[cy][cx] == 1:
                             if evento.button == 3:
@@ -83,43 +86,56 @@ class GameScene:
                                 ruta_disponible = []
                                 ruta_objetivo = None
 
-            while objetivo_actual is not None and tuple(chef_pos) == objetivo_actual:
-                index_objetivo += 1
-                if index_objetivo < len(lista_objetivos):
-                    objetivo_actual = lista_objetivos[index_objetivo]
-                    ruta_disponible = []
-                    ruta_objetivo = None
-                    contador_frames = 0
+            # --- ESPERA Y AVANCE DE TAREAS ---
+            if objetivo_actual is not None and tuple(chef_pos) == objetivo_actual:
+                if not esperando_accion:
+                    tiempo_espera = TIEMPOS_ESPERA.get(objetivo_actual, 0)
+                    
+                    if tiempo_espera > 0:
+                        esperando_accion = True
+                        tiempo_fin_espera = pygame.time.get_ticks() + tiempo_espera
+                        print(f"Chef trabajando en {objetivo_actual}... ({tiempo_espera/1000}s)")
+                    else:
+                        index_objetivo += 1
+                        ruta_disponible = []
+                        ruta_objetivo = None
+                        contador_frames = 0
+                        if index_objetivo >= len(lista_objetivos):
+                            print("Todos los pedidos completados.")
                 else:
-                    objetivo_actual = None
-                    print("Todos los pedidos completados.")
+                    if pygame.time.get_ticks() >= tiempo_fin_espera:
+                        esperando_accion = False
+                        index_objetivo += 1
+                        ruta_disponible = []
+                        ruta_objetivo = None
+                        contador_frames = 0
+                        print(f"¡Acción en {objetivo_actual} completada!")
+                        if index_objetivo >= len(lista_objetivos):
+                            print("Todos los pedidos completados.")
 
-            if objetivo_actual is not None and (ruta_objetivo != objetivo_actual or not ruta_disponible):
-                ruta_disponible = pathfinder.obtener_ruta(chef_pos, objetivo_actual)
-                ruta_objetivo = objetivo_actual
-                contador_frames = 0
-
-                if not ruta_disponible and tuple(chef_pos) != objetivo_actual:
-                    print(f"Objetivo inalcanzable, saltando: {objetivo_actual}")
-                    index_objetivo += 1
-                    ruta_objetivo = None
-                    ruta_disponible = []
-
-            if ruta_disponible:
-                contador_frames += 1
-                if contador_frames >= VELOCIDAD_MOVIMIENTO:
-                    siguiente_paso = ruta_disponible.pop(0)
-                    chef_pos[0], chef_pos[1] = siguiente_paso[0], siguiente_paso[1]
+            # --- MOVIMIENTO ---
+            if not esperando_accion and objetivo_actual is not None and tuple(chef_pos) != objetivo_actual:
+                
+                if ruta_objetivo != objetivo_actual or not ruta_disponible:
+                    ruta_disponible = pathfinder.obtener_ruta(chef_pos, objetivo_actual)
+                    ruta_objetivo = objetivo_actual
                     contador_frames = 0
 
-                    if not ruta_disponible:
-                        print(f"Destino: {chef_pos}")
-                        if objetivo_actual is not None and tuple(chef_pos) == objetivo_actual:
-                            index_objetivo += 1
-                            ruta_objetivo = None
+                    if not ruta_disponible and tuple(chef_pos) != objetivo_actual:
+                        print(f"Objetivo inalcanzable, saltando: {objetivo_actual}")
+                        index_objetivo += 1
+                        ruta_objetivo = None
+                        ruta_disponible = []
+
+                if ruta_disponible:
+                    contador_frames += 1
+                    if contador_frames >= VELOCIDAD_MOVIMIENTO:
+                        siguiente_paso = ruta_disponible.pop(0)
+                        chef_pos[0], chef_pos[1] = siguiente_paso[0], siguiente_paso[1]
+                        contador_frames = 0
 
             render_frame(
-                self.ventana,
+                self.pantalla_virtual, 
                 TAM_CELDA,
                 ANCHO_GRID,
                 ALTO_GRID,
@@ -132,6 +148,11 @@ class GameScene:
                 img_escenario=self.img_escenario, 
                 img_chef=self.img_chef            
             )
+            
+            superficie_escalada = pygame.transform.smoothscale(self.pantalla_virtual, (950, 650))
+            
+            self.ventana.blit(superficie_escalada, (0, 0))
+            
             pygame.display.flip()
             self.reloj.tick(60)
 
