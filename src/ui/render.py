@@ -31,6 +31,7 @@ def render_frame(
     esta_persiguiendo: bool,
 ):
     ventana.fill((0, 0, 0))
+    fuente_coord = pygame.font.SysFont(None, 20)
 
     for fila in range(alto_grid):
         for col in range(ancho_grid):
@@ -39,22 +40,22 @@ def render_frame(
             pygame.draw.rect(ventana, color_celda, (x, y, tam_celda, tam_celda))
             pygame.draw.rect(ventana, COLOR_REJILLA, (x, y, tam_celda, tam_celda), 1)
 
+
+    for (x, y) in pisos_lentos:
+        pygame.draw.rect(
+            ventana,
+            (100, 180, 255), 
+            (x * tam_celda, y * tam_celda, tam_celda, tam_celda),
+     )
+
     dibujar_objetivos(ventana, tam_celda)
 
     for olor in zonas_olor:
-        pygame.draw.rect(
-            ventana,
-            (180, 180, 80),
-            (olor[0] * tam_celda + 4, olor[1] * tam_celda + 4, tam_celda - 8, tam_celda - 8),
-        )
+        pygame.draw.rect(ventana, (180, 180, 80), (olor[0] * tam_celda + 4, olor[1] * tam_celda + 4, tam_celda - 8, tam_celda - 8))
 
     if pozo_descubierto:
         for (px, py) in pozos_pos:
-            pygame.draw.rect(
-                ventana,
-                (0, 0, 0),
-                (px * tam_celda + 10, py * tam_celda + 10, tam_celda - 20, tam_celda - 20),
-            )
+            pygame.draw.rect(ventana, (0, 0, 0), (px * tam_celda + 10, py * tam_celda + 10, tam_celda - 20, tam_celda - 20))
 
     # Dibujar zona de distracción si está activa
     if tiempo_distraccion > 0:

@@ -43,3 +43,15 @@ def dibujar_objetivos(ventana, tam_celda):
     pygame.draw.rect(ventana, COLOR_PLATO, (12 * tam_celda, 2 * tam_celda, tam_celda, tam_celda))
     pygame.draw.rect(ventana, COLOR_PLATO, (13 * tam_celda, 2 * tam_celda, tam_celda, tam_celda))
     pygame.draw.rect(ventana, COLOR_PLATO, (14 * tam_celda, 2 * tam_celda, tam_celda, tam_celda))
+
+TIEMPOS_ESPERA = {
+    (13, 7): 1000,  # Ir por tomate (1s)
+    (15, 7): 1000,  # Ir por cebolla (1s)
+    (5, 7): 4000,   # Tabla de cortar (4s)
+    (3, 3): 5000,   # Olla (5s)
+    (12, 3): 1000,  # Recoger Plato 1 (1s)
+    (13, 3): 1000,  # Recoger Plato 2 (1s)
+    (14, 3): 1000,  # Recoger Plato 3 (1s)
+    (16, 4): 2000,  # Entregar orden 1 (2s)
+    (16, 5): 2000,  # Entregar orden 2 (2s)
+}
