@@ -5,11 +5,18 @@ ANCHO_GRID = 18
 ALTO_GRID = 11
 VELOCIDAD_MOVIMIENTO = 10
 
+# Velocidades del interceptor
+VELOCIDAD_PERSECUCION = 7  # Más rápido que el chef normal
+DISTANCIA_PERSECUCION = 3  # Cuadros para activar persecución
+
 COLOR_SUELO = (139, 115, 85)
 COLOR_MURO = (50, 50, 50)
 COLOR_REJILLA = (80, 80, 80)
 COLOR_RUTA = (100, 200, 100)
 COLOR_CHEF = (208, 50, 53)
+COLOR_INTERCEPTOR = (63, 63, 255)  # Azul para el interceptor
+COLOR_DISTRACTION = (255, 255, 0)  # Amarillo para zona de distracción
+COLOR_RUTA_INTERCEPTOR = (100, 100, 200)  # Azul claro para ruta interceptor
 COLOR_TOMATE = (255, 0, 0)
 COLOR_CEBOLLA = (255, 255, 255)
 COLOR_TABLA_CORTAR = (255, 255, 255)
