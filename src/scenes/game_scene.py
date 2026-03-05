@@ -31,7 +31,8 @@ class GameScene:
         interceptor_pos = [15, 7]  # Posición inicial opuesta
         ruta_interceptor: list[tuple[int, int]] = []
         contador_frames_interceptor = 0
-        objetivo_interceptor = [8, 5]  # Objetivo inicial del interceptor
+        index_objetivo_interceptor = 0
+        ruta_objetivo_interceptor = None
 
         # Estados de persecución y distracción
         esta_persiguiendo = False
@@ -61,6 +62,20 @@ class GameScene:
         print("=" * 40 + "\n")
 
         pathfinder = Pathfinder(mapa_actual)
+
+        # Tiempo de la última intercepción que provocó distracción
+        ultima_intercepcion = 0.0
+
+        # Helper: obtener ruta alternativa evitando posiciones concretas
+        def obtener_ruta_alternativa(start_pos, end_pos, evitar_positions=None):
+            evitar_positions = set(tuple(p) for p in (evitar_positions or []))
+            # copiar mapa y marcar como obstáculos las posiciones a evitar
+            matrix_copy = [row[:] for row in mapa_actual]
+            for (ex, ey) in list(evitar_positions):
+                if 0 <= ey < len(matrix_copy) and 0 <= ex < len(matrix_copy[0]):
+                    matrix_copy[ey][ex] = 0
+            pf_alt = Pathfinder(matrix_copy)
+            return pf_alt.obtener_ruta(start_pos, end_pos)
 
         ejecutando = True
         while ejecutando:
@@ -143,14 +158,24 @@ class GameScene:
                                 index_objetivo += 1
                                 ruta_objetivo = None
 
-            # Lógica del interceptor
+            # Lógica del interceptor: usa la misma lista de objetivos que el chef
+            # pero mantiene su propio índice y calcula rutas alternativas para
+            # evitar ocupar exactamente la "siguente" celda del chef cuando esté cerca.
+            chef_next_pos = ruta_chef[0] if ruta_chef else None
+
+            # Actualizar objetivo del interceptor desde la misma lista compartida
+            if index_objetivo_interceptor < len(lista_objetivos):
+                objetivo_actual_interceptor = lista_objetivos[index_objetivo_interceptor]
+            else:
+                objetivo_actual_interceptor = None
+
+            # Si estamos cerca del chef y no hay distracción, intentar interceptar
             if distancia_al_chef <= DISTANCIA_PERSECUCION and tiempo_distraccion == 0.0:
-                # ACTIVAR PERSECUCIÓN
                 if not esta_persiguiendo:
                     esta_persiguiendo = True
                     print(f"¡Interceptor activado! Distancia: {distancia_al_chef}")
 
-                # Perseguir al chef
+                # Perseguir al chef directamente
                 ruta_interceptor = pathfinder.obtener_ruta(interceptor_pos, chef_pos)
                 contador_frames_interceptor += 1
 
@@ -159,31 +184,51 @@ class GameScene:
                     interceptor_pos[0], interceptor_pos[1] = siguiente_paso[0], siguiente_paso[1]
                     contador_frames_interceptor = 0
 
-                # Verificar si alcanzó al chef para distraerlo
+                # Si alcanza al chef, realiza la distracción pero no bloquea el flujo
                 if tuple(interceptor_pos) == tuple(chef_pos):
-                    tiempo_distraccion = random.uniform(3, 5)  # 3-5 segundos
-                    inicio_distraccion = time.time()
-                    esta_persiguiendo = False
-                    ruta_interceptor = []
-                    print(f"Distracción activada por {tiempo_distraccion:.2f} segundos")
+                    ahora = time.time()
+                    # Respetar un delay mínimo entre intercepciones
+                    if ahora - ultima_intercepcion >= 2.0:
+                        tiempo_distraccion = random.uniform(3, 5)
+                        inicio_distraccion = ahora
+                        ultima_intercepcion = ahora
+                        esta_persiguiendo = False
+                        ruta_interceptor = []
+                        print(f"Distracción activada por {tiempo_distraccion:.2f} segundos")
+                    else:
+                        # Ignorar intercepción si ocurrió muy recientemente
+                        esta_persiguiendo = False
+                        ruta_interceptor = []
+                        restante = 2.0 - (ahora - ultima_intercepcion)
+                        if restante < 0:
+                            restante = 0.0
+                        print(f"Intercepción ignorada, esperar {restante:.2f}s más")
 
             else:
-                # MODO NORMAL - Ir a objetivo propio
+                # Volver a tareas: seguir los mismos objetivos que el chef
                 if esta_persiguiendo:
                     esta_persiguiendo = False
-                    print("Interceptor vuelve a modo normal")
+                    print("Interceptor vuelve a tareas normales")
 
-                if not ruta_interceptor or tuple(interceptor_pos) == tuple(objetivo_interceptor):
-                    # Generar nuevo objetivo aleatorio
-                    celdas_libres = []
-                    for y in range(ALTO_GRID):
-                        for x in range(ANCHO_GRID):
-                            if mapa_actual[y][x] == 1 and [x, y] != chef_pos and [x, y] != interceptor_pos:
-                                celdas_libres.append([x, y])
-                    if celdas_libres:
-                        objetivo_interceptor = random.choice(celdas_libres)
-                        ruta_interceptor = pathfinder.obtener_ruta(interceptor_pos, objetivo_interceptor)
-                        contador_frames_interceptor = 0
+                # Si necesita calcular ruta hacia su objetivo, intentar evitar la siguiente celda del chef
+                if objetivo_actual_interceptor is not None and (ruta_objetivo_interceptor != objetivo_actual_interceptor or not ruta_interceptor):
+                    evitar = []
+                    if distancia_al_chef <= DISTANCIA_PERSECUCION:
+                        # evitar la celda actual y la siguiente del chef para forzar ruta alternativa
+                        evitar.append(tuple(chef_pos))
+                        if chef_next_pos:
+                            evitar.append(tuple(chef_next_pos))
+
+                    if evitar:
+                        ruta_interceptor = obtener_ruta_alternativa(interceptor_pos, objetivo_actual_interceptor, evitar_positions=evitar)
+                        if not ruta_interceptor:
+                            # fallback a ruta normal
+                            ruta_interceptor = pathfinder.obtener_ruta(interceptor_pos, objetivo_actual_interceptor)
+                    else:
+                        ruta_interceptor = pathfinder.obtener_ruta(interceptor_pos, objetivo_actual_interceptor)
+
+                    ruta_objetivo_interceptor = objetivo_actual_interceptor
+                    contador_frames_interceptor = 0
 
                 # Mover interceptor normalmente
                 if ruta_interceptor:
@@ -192,6 +237,11 @@ class GameScene:
                         siguiente_paso = ruta_interceptor.pop(0)
                         interceptor_pos[0], interceptor_pos[1] = siguiente_paso[0], siguiente_paso[1]
                         contador_frames_interceptor = 0
+
+                        # Si llega a su objetivo, avanzar su índice (aunque sea el mismo objetivo del chef)
+                        if objetivo_actual_interceptor is not None and tuple(interceptor_pos) == objetivo_actual_interceptor:
+                            index_objetivo_interceptor += 1
+                            ruta_objetivo_interceptor = None
 
             render_frame(
                 self.ventana,
