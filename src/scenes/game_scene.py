@@ -1,7 +1,12 @@
 import copy
 import pygame
+import random
+import time
 
-from config import TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO, TIEMPOS_ESPERA
+from config import (
+    TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO,
+    VELOCIDAD_PERSECUCION, DISTANCIA_PERSECUCION
+)
 from src.systems.maps import MAPA_ORIGINAL, generar_pozos_y_olores
 from src.systems.orders import PLATOS, ENTREGAS, generar_pedidos, expandir_objetivos
 from src.systems.pathfinding import Pathfinder
@@ -37,8 +42,8 @@ class GameScene:
 
         mapa_actual = copy.deepcopy(MAPA_ORIGINAL)
         chef_pos = [1, 3]
-        ruta_disponible: list[tuple[int, int]] = []
-        contador_frames = 0
+        ruta_chef: list[tuple[int, int]] = []
+        contador_frames_chef = 0
         index_objetivo = 0
         ruta_objetivo = None
         ahora = pygame.time.get_ticks()
@@ -54,6 +59,18 @@ class GameScene:
         inicio_lavado = 0
         progreso_lavado = 0.0
         esperando_plato_sucio = False
+
+        # Estado del interceptor
+        interceptor_pos = [15, 7]  # Posición inicial opuesta
+        ruta_interceptor: list[tuple[int, int]] = []
+        contador_frames_interceptor = 0
+        index_objetivo_interceptor = 0
+        ruta_objetivo_interceptor = None
+
+        # Estados de persecución y distracción
+        esta_persiguiendo = False
+        tiempo_distraccion = 0.0
+        inicio_distraccion = 0.0
 
         lista_pedidos = generar_pedidos(self.ordenes)
         lista_objetivos = expandir_objetivos(lista_pedidos)
@@ -91,7 +108,7 @@ class GameScene:
 
         print("Zonas de piso lento", zona_lenta)
         print("\n" + "=" * 40)
-        print("NUEVA SIMULACIÓN INICIADA")
+        print("NUEVA SIMULACIÓN INICIADA - CON AGENTE INTERCEPTOR")
         print(f"DEBUG: Pozos generados en {pozos_pos}")
         if lista_pedidos:
             print(f"Pedidos: {lista_pedidos}")
@@ -100,10 +117,19 @@ class GameScene:
 
         pathfinder = Pathfinder(mapa_actual)
 
-        def registrar_entrega(tiempo_actual: int):
-            total_pendiente = platos_sucios + len(temporizadores_sucios)
-            if total_pendiente < 3:
-                temporizadores_sucios.append(tiempo_actual + retraso_plato_sucio_ms)
+        # Tiempo de la última intercepción que provocó distracción
+        ultima_intercepcion = 0.0
+
+        # Helper: obtener ruta alternativa evitando posiciones concretas
+        def obtener_ruta_alternativa(start_pos, end_pos, evitar_positions=None):
+            evitar_positions = set(tuple(p) for p in (evitar_positions or []))
+            # copiar mapa y marcar como obstáculos las posiciones a evitar
+            matrix_copy = [row[:] for row in mapa_actual]
+            for (ex, ey) in list(evitar_positions):
+                if 0 <= ey < len(matrix_copy) and 0 <= ex < len(matrix_copy[0]):
+                    matrix_copy[ey][ex] = 0
+            pf_alt = Pathfinder(matrix_copy)
+            return pf_alt.obtener_ruta(start_pos, end_pos)
 
         ejecutando = True
         while ejecutando:
@@ -140,6 +166,9 @@ class GameScene:
             else:
                 objetivo_actual = None
 
+            # Calcular distancia entre agentes
+            distancia_al_chef = abs(interceptor_pos[0] - chef_pos[0]) + abs(interceptor_pos[1] - chef_pos[1])
+
             for evento in pygame.event.get():
                 if evento.type == pygame.QUIT:
                     return False
@@ -159,105 +188,146 @@ class GameScene:
                     cx, cy = mx_real // TAM_CELDA, my_real // TAM_CELDA
                     if 0 <= cx < ANCHO_GRID and 0 <= cy < ALTO_GRID:
                         if mapa_actual[cy][cx] == 1:
-                            if evento.button == 3:
+                            if evento.button == 1:  # Click izquierdo: teletransportar chef
                                 chef_pos = [cx, cy]
-                                ruta_disponible = []
+                                ruta_chef = []
+                                ruta_objetivo = None
+                                tiempo_distraccion = 0.0
+                            elif evento.button == 3:  # Click derecho: nuevo objetivo interceptor
+                                objetivo_interceptor = [cx, cy]
+                                ruta_interceptor = pathfinder.obtener_ruta(interceptor_pos, objetivo_interceptor)
+                                contador_frames_interceptor = 0
+
+            # Gestionar tiempo de distracción del chef
+            tiempo_actual = time.time()
+            if tiempo_distraccion > 0:
+                if tiempo_actual - inicio_distraccion >= tiempo_distraccion:
+                    tiempo_distraccion = 0.0
+                    print("Distracción terminada - Chef puede moverse nuevamente")
+                else:
+                    # Chef está distraído, no se mueve
+                    pass
+            else:
+                # Lógica normal del chef
+                while objetivo_actual is not None and tuple(chef_pos) == objetivo_actual:
+                    index_objetivo += 1
+                    if index_objetivo < len(lista_objetivos):
+                        objetivo_actual = lista_objetivos[index_objetivo]
+                        ruta_chef = []
+                        ruta_objetivo = None
+                        contador_frames_chef = 0
+                    else:
+                        objetivo_actual = None
+                        print("Todos los pedidos completados.")
+
+                if objetivo_actual is not None and (ruta_objetivo != objetivo_actual or not ruta_chef):
+                    ruta_chef = pathfinder.obtener_ruta(chef_pos, objetivo_actual)
+                    ruta_objetivo = objetivo_actual
+                    contador_frames_chef = 0
+
+                    if not ruta_chef and tuple(chef_pos) != objetivo_actual:
+                        print(f"Objetivo inalcanzable, saltando: {objetivo_actual}")
+                        index_objetivo += 1
+                        ruta_objetivo = None
+                        ruta_chef = []
+
+                if ruta_chef:
+                    contador_frames_chef += 1
+                    if contador_frames_chef >= VELOCIDAD_MOVIMIENTO:
+                        siguiente_paso = ruta_chef.pop(0)
+                        chef_pos[0], chef_pos[1] = siguiente_paso[0], siguiente_paso[1]
+                        contador_frames_chef = 0
+
+                        if not ruta_chef:
+                            print(f"Chef llegó a: {chef_pos}")
+                            if objetivo_actual is not None and tuple(chef_pos) == objetivo_actual:
+                                index_objetivo += 1
                                 ruta_objetivo = None
 
-            if (
-                objetivo_actual in PLATOS
-                and platos_limpios == 0
-                and not en_reposicion_plato
-                and not lavando_plato
-            ):
-                if platos_sucios > 0:
-                    lista_objetivos[index_objetivo:index_objetivo] = [objetivo_platos_sucios, objetivo_lavado]
-                    en_reposicion_plato = True
-                    buscando_plato_sucio = True
-                    esperando_plato_sucio = False
-                    ruta_disponible = []
-                    ruta_objetivo = None
-                    contador_frames = 0
-                    objetivo_actual = lista_objetivos[index_objetivo]
-                    print("Sin platos limpios. Yendo por plato sucio para lavar.")
-                else:
-                    if not esperando_plato_sucio:
-                        print("Sin platos limpios ni sucios disponibles. Esperando que aparezca uno sucio...")
-                    esperando_plato_sucio = True
-                    ruta_disponible = []
-                    ruta_objetivo = None
+            # Lógica del interceptor: usa la misma lista de objetivos que el chef
+            # pero mantiene su propio índice y calcula rutas alternativas para
+            # evitar ocupar exactamente la "siguente" celda del chef cuando esté cerca.
+            chef_next_pos = ruta_chef[0] if ruta_chef else None
 
-            while (
-                objetivo_actual is not None
-                and tuple(chef_pos) == objetivo_actual
-                and not lavando_plato
-            ):
-                if en_reposicion_plato and buscando_plato_sucio and objetivo_actual == objetivo_platos_sucios:
-                    if platos_sucios > 0:
-                        platos_sucios -= 1
-                        tiene_plato_sucio = True
-                        buscando_plato_sucio = False
-                        print(f"Plato sucio recogido en (17,6). Sucios restantes: {platos_sucios}")
+            # Actualizar objetivo del interceptor desde la misma lista compartida
+            if index_objetivo_interceptor < len(lista_objetivos):
+                objetivo_actual_interceptor = lista_objetivos[index_objetivo_interceptor]
+            else:
+                objetivo_actual_interceptor = None
 
-                elif en_reposicion_plato and tiene_plato_sucio and objetivo_actual == objetivo_lavado:
-                    lavando_plato = True
-                    inicio_lavado = ahora
-                    progreso_lavado = 0.0
-                    ruta_disponible = []
-                    ruta_objetivo = None
-                    contador_frames = 0
-                    print("Lavando plato en (0,6)...")
-                    break
+            # Si estamos cerca del chef y no hay distracción, intentar interceptar
+            if distancia_al_chef <= DISTANCIA_PERSECUCION and tiempo_distraccion == 0.0:
+                if not esta_persiguiendo:
+                    esta_persiguiendo = True
+                    print(f"¡Interceptor activado! Distancia: {distancia_al_chef}")
 
-                if objetivo_actual in PLATOS and platos_limpios > 0:
-                    platos_limpios -= 1
-                    print(f"Plato limpio tomado. Platos limpios restantes: {platos_limpios}")
+                # Perseguir al chef directamente
+                ruta_interceptor = pathfinder.obtener_ruta(interceptor_pos, chef_pos)
+                contador_frames_interceptor += 1
 
-                if objetivo_actual in ENTREGAS:
-                    registrar_entrega(ahora)
-                    print("Pedido entregado. Plato sucio llegará en 15s.")
+                if ruta_interceptor and contador_frames_interceptor >= VELOCIDAD_PERSECUCION:
+                    siguiente_paso = ruta_interceptor.pop(0)
+                    interceptor_pos[0], interceptor_pos[1] = siguiente_paso[0], siguiente_paso[1]
+                    contador_frames_interceptor = 0
 
-                index_objetivo += 1
-                if index_objetivo < len(lista_objetivos):
-                    objetivo_actual = lista_objetivos[index_objetivo]
-                    ruta_disponible = []
-                    ruta_objetivo = None
-                    contador_frames = 0
-                else:
-                    objetivo_actual = None
-                    print("Todos los pedidos completados.")
+                # Si alcanza al chef, realiza la distracción pero no bloquea el flujo
+                if tuple(interceptor_pos) == tuple(chef_pos):
+                    ahora = time.time()
+                    # Respetar un delay mínimo entre intercepciones
+                    if ahora - ultima_intercepcion >= 2.0:
+                        tiempo_distraccion = random.uniform(3, 5)
+                        inicio_distraccion = ahora
+                        ultima_intercepcion = ahora
+                        esta_persiguiendo = False
+                        ruta_interceptor = []
+                        print(f"Distracción activada por {tiempo_distraccion:.2f} segundos")
+                    else:
+                        # Ignorar intercepción si ocurrió muy recientemente
+                        esta_persiguiendo = False
+                        ruta_interceptor = []
+                        restante = 2.0 - (ahora - ultima_intercepcion)
+                        if restante < 0:
+                            restante = 0.0
+                        print(f"Intercepción ignorada, esperar {restante:.2f}s más")
 
-            if (
-                not lavando_plato
-                and objetivo_actual is not None
-                and (ruta_objetivo != objetivo_actual or not ruta_disponible)
-            ):
-                ruta_disponible = pathfinder.obtener_ruta(chef_pos, objetivo_actual)
-                ruta_objetivo = objetivo_actual
-                contador_frames = 0
+            else:
+                # Volver a tareas: seguir los mismos objetivos que el chef
+                if esta_persiguiendo:
+                    esta_persiguiendo = False
+                    print("Interceptor vuelve a tareas normales")
 
-                if not ruta_disponible and tuple(chef_pos) != objetivo_actual:
-                    print(f"Objetivo inalcanzable, saltando: {objetivo_actual}")
-                    index_objetivo += 1
-                    ruta_objetivo = None
-                    ruta_disponible = []
+                # Si necesita calcular ruta hacia su objetivo, intentar evitar la siguiente celda del chef
+                if objetivo_actual_interceptor is not None and (ruta_objetivo_interceptor != objetivo_actual_interceptor or not ruta_interceptor):
+                    evitar = []
+                    if distancia_al_chef <= DISTANCIA_PERSECUCION:
+                        # evitar la celda actual y la siguiente del chef para forzar ruta alternativa
+                        evitar.append(tuple(chef_pos))
+                        if chef_next_pos:
+                            evitar.append(tuple(chef_next_pos))
 
-                 
-        
-            if ruta_disponible:
-                contador_frames += 1
-                velcodad_actual = VELOCIDAD_MOVIMIENTO
-                if tuple(chef_pos) in zona_lenta:
-                    velcodad_actual = VELOCIDAD_MOVIMIENTO * 3
-                if contador_frames >= velcodad_actual:
-                    siguiente_paso = ruta_disponible.pop(0)
-                    chef_pos[0], chef_pos[1] = siguiente_paso[0], siguiente_paso[1]
-                    contador_frames = 0
+                    if evitar:
+                        ruta_interceptor = obtener_ruta_alternativa(interceptor_pos, objetivo_actual_interceptor, evitar_positions=evitar)
+                        if not ruta_interceptor:
+                            # fallback a ruta normal
+                            ruta_interceptor = pathfinder.obtener_ruta(interceptor_pos, objetivo_actual_interceptor)
+                    else:
+                        ruta_interceptor = pathfinder.obtener_ruta(interceptor_pos, objetivo_actual_interceptor)
 
-                    if not ruta_disponible:
-                        print(f"Destino: {chef_pos}")
-                        if objetivo_actual is not None and tuple(chef_pos) == objetivo_actual:
-                            ruta_objetivo = None
+                    ruta_objetivo_interceptor = objetivo_actual_interceptor
+                    contador_frames_interceptor = 0
+
+                # Mover interceptor normalmente
+                if ruta_interceptor:
+                    contador_frames_interceptor += 1
+                    if contador_frames_interceptor >= VELOCIDAD_MOVIMIENTO:
+                        siguiente_paso = ruta_interceptor.pop(0)
+                        interceptor_pos[0], interceptor_pos[1] = siguiente_paso[0], siguiente_paso[1]
+                        contador_frames_interceptor = 0
+
+                        # Si llega a su objetivo, avanzar su índice (aunque sea el mismo objetivo del chef)
+                        if objetivo_actual_interceptor is not None and tuple(interceptor_pos) == objetivo_actual_interceptor:
+                            index_objetivo_interceptor += 1
+                            ruta_objetivo_interceptor = None
 
             render_frame(
                 self.pantalla_virtual, 
@@ -266,11 +336,15 @@ class GameScene:
                 ALTO_GRID,
                 mapa_actual,
                 chef_pos,
-                ruta_disponible,
+                ruta_chef,
                 zonas_olor,
                 pozo_descubierto,
                 pozos_pos,
-                pisos_lentos,
+                interceptor_pos,
+                ruta_interceptor,
+                tiempo_distraccion,
+                distancia_al_chef,
+                esta_persiguiendo,
             )
             
             superficie_escalada = pygame.transform.smoothscale(self.pantalla_virtual, (950, 650))
