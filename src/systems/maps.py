@@ -14,6 +14,30 @@ MAPA_ORIGINAL = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 ]
 
+def generar_pisos_lentos(
+    mapa: list[list[int]],
+    chef_pos: list[int],
+    objetivos: list[tuple[int, int]],
+    cantidad: int = 6,
+    celdas_prohibidas: list[tuple[int, int]] | None = None,
+):
+    celdas_libres = []
+    prohibidas = set(celdas_prohibidas or [])
+
+    for y in range(len(mapa)):
+        for x in range(len(mapa[0])):
+            if (
+                mapa[y][x] == 1
+                and (x, y) != tuple(chef_pos)
+                and (x, y) not in objetivos
+                and (x, y) not in prohibidas
+            ):
+                celdas_libres.append((x, y))
+
+    cantidad_real = min(cantidad, len(celdas_libres))
+    pisos_lentos = random.sample(celdas_libres, k=cantidad_real)
+
+    return pisos_lentos
 
 def generar_pozo_y_olores(mapa: list[list[int]], chef_pos: list[int], objetivos: list[tuple[int, int]]):
     celdas_libres = []
@@ -30,6 +54,7 @@ def generar_pozo_y_olores(mapa: list[list[int]], chef_pos: list[int], objetivos:
             olores.append((nx, ny))
 
     return pozo, olores
+
 
 
 def generar_pozos_y_olores(
