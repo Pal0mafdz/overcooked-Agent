@@ -25,6 +25,7 @@ def render_frame(
 
 ):
     ventana.fill((0, 0, 0))
+    fuente_coord = pygame.font.SysFont(None, 20)
 
     for fila in range(alto_grid):
         for col in range(ancho_grid):
@@ -44,22 +45,23 @@ def render_frame(
     dibujar_objetivos(ventana, tam_celda)
 
     for olor in zonas_olor:
-        pygame.draw.rect(
-            ventana,
-            (180, 180, 80),
-            (olor[0] * tam_celda + 4, olor[1] * tam_celda + 4, tam_celda - 8, tam_celda - 8),
-        )
+        pygame.draw.rect(ventana, (180, 180, 80), (olor[0] * tam_celda + 4, olor[1] * tam_celda + 4, tam_celda - 8, tam_celda - 8))
 
     if pozo_descubierto:
         for (px, py) in pozos_pos:
-            pygame.draw.rect(
-                ventana,
-                (0, 0, 0),
-                (px * tam_celda + 10, py * tam_celda + 10, tam_celda - 20, tam_celda - 20),
-            )
+            pygame.draw.rect(ventana, (0, 0, 0), (px * tam_celda + 10, py * tam_celda + 10, tam_celda - 20, tam_celda - 20))
 
     for rx, ry in ruta_disponible:
         pygame.draw.rect(ventana, COLOR_RUTA, (rx * tam_celda + 2, ry * tam_celda, 60, 60))
 
     centro_chef = (chef_pos[0] * tam_celda + tam_celda // 2, chef_pos[1] * tam_celda + tam_celda // 2)
     pygame.draw.circle(ventana, COLOR_CHEF, centro_chef, 22)
+
+    if lavando_plato:
+        barra_x = 0 * tam_celda + 6
+        barra_y = 6 * tam_celda + tam_celda - 14
+        barra_w = tam_celda - 12
+        barra_h = 8
+        pygame.draw.rect(ventana, (40, 40, 40), (barra_x, barra_y, barra_w, barra_h))
+        pygame.draw.rect(ventana, (120, 220, 120), (barra_x, barra_y, int(barra_w * progreso_lavado), barra_h))
+        pygame.draw.rect(ventana, (220, 220, 220), (barra_x, barra_y, barra_w, barra_h), 1)
