@@ -70,6 +70,13 @@ class GameScene:
 
         pathfinder = Pathfinder(mapa_actual)
 
+        def es_objetivo_valido(valor) -> bool:
+            return (
+                isinstance(valor, tuple)
+                and len(valor) == 2
+                and all(isinstance(v, int) for v in valor)
+            )
+
         def registrar_entrega(tiempo_actual: int):
             total_pendiente = platos_sucios + len(temporizadores_sucios)
             if total_pendiente < 3:
@@ -109,6 +116,13 @@ class GameScene:
                 objetivo_actual = lista_objetivos[index_objetivo]
             else:
                 objetivo_actual = None
+
+            if objetivo_actual is not None and not es_objetivo_valido(objetivo_actual):
+                print(f"Objetivo invalido ({objetivo_actual}), se omite.")
+                index_objetivo += 1
+                ruta_disponible = []
+                ruta_objetivo = None
+                continue
 
             for evento in pygame.event.get():
                 if evento.type == pygame.QUIT:
@@ -196,6 +210,13 @@ class GameScene:
                 else:
                     objetivo_actual = None
                     print("Todos los pedidos completados.")
+
+            if objetivo_actual is not None and not es_objetivo_valido(objetivo_actual):
+                print(f"Objetivo invalido ({objetivo_actual}), se omite.")
+                index_objetivo += 1
+                ruta_objetivo = None
+                ruta_disponible = []
+                continue
 
             if (
                 not lavando_plato
