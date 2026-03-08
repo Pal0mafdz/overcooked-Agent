@@ -36,8 +36,8 @@ def expandir_objetivos(pedidos: list[str]) -> list[tuple[int, int]]:
 
         if (3, 3) in secuencia:
             idx = secuencia.index((3, 3))
-            # Elegir un plato y extraer solo sus coordenadas
-            plato_coord, plato_desc = random.choice(PLATOS)
+            # PLATOS ya contiene coordenadas (x, y), no (coord, descripcion)
+            plato_coord = random.choice(PLATOS)
             secuencia.insert(idx + 1, plato_coord)
             secuencia.insert(idx + 2, (3, 3))
 
