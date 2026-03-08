@@ -33,6 +33,18 @@ def dibujar_objetivos(ventana, tam_celda):
     pygame.draw.rect(ventana, COLOR_ENTREGA, (17 * tam_celda, 4 * tam_celda, tam_celda, tam_celda))
     pygame.draw.rect(ventana, COLOR_ENTREGA, (17 * tam_celda, 5 * tam_celda, tam_celda, tam_celda))
     pygame.draw.rect(ventana, COLOR_RECOGE_PLATOS, (17 * tam_celda, 6 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_PLATO, (12 * tam_celda, 2 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_PLATO, (13 * tam_celda, 2 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_PLATO, (14 * tam_celda, 2 * tam_celda, tam_celda, tam_celda))
+    pygame.draw.rect(ventana, COLOR_PLATO, (0 * tam_celda, 5 * tam_celda, tam_celda, tam_celda))
+    pygame.draw.rect(ventana, COLOR_PLATO, (0 * tam_celda, 4 * tam_celda, tam_celda, tam_celda))
+    pygame.draw.rect(ventana, COLOR_PLATO, (0 * tam_celda, 3 * tam_celda, tam_celda, tam_celda))
+
+TIEMPOS_ESPERA = {
+    (13, 7): 1000,   # Ir por tomate (1 segundo)
+    (15, 7): 1000,   # Ir por cebolla (1 segundo)
+    (5, 7): 4000,    # Cortar en tabla (4 segundos)
+    (3, 3): 5000,    # Cocinar en olla (5 segundos)
+    (1, 3): 1000,    # Agarrar plato limpio (1 segundo)
+    (1, 4): 1000,    # Agarrar plato limpio (1 segundo)
+    (1, 5): 1000,    # Agarrar plato limpio (1 segundo)
+    (16, 4): 2000,   # Entregar orden (2 segundos)
+    (16, 5): 2000    # Entregar orden (2 segundos)
+}
