@@ -47,7 +47,7 @@ def render_frame(
         ventana.blit(texto_fila, (4, y_fila))
 
     texto_limpios = fuente_coord.render(f"L:{platos_limpios}", True, (200, 240, 255))
-    ventana.blit(texto_limpios, (12 * tam_celda + 4, 2 * tam_celda + 4))
+    ventana.blit(texto_limpios, (1 * tam_celda + 4, 2 * tam_celda + 4))
 
     texto_sucios = fuente_coord.render(f"S:{platos_sucios}", True, (255, 220, 150))
     ventana.blit(texto_sucios, (16 * tam_celda + 4, 6 * tam_celda + 4))

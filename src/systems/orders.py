@@ -2,7 +2,7 @@ import random
 
 PEDIDOS = ["sopa_tomate", "sopa"]
 
-PLATOS = [(12, 3), (13, 3), (14, 3)]
+PLATOS = [(1, 5), (1, 4), (1, 3)]
 
 ENTREGAS = [(16, 4), (16, 5)]
 
