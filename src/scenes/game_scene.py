@@ -1,7 +1,7 @@
 import copy
 import pygame
 
-from config import TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO
+from config import TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO, TIEMPOS_ESPERA
 from src.systems.maps import MAPA_ORIGINAL, generar_pozos_y_olores
 from src.systems.orders import PLATOS, ENTREGAS, generar_pedidos, expandir_objetivos
 from src.systems.pathfinding import Pathfinder
@@ -54,6 +54,11 @@ class GameScene:
         progreso_lavado = 0.0
         esperando_plato_sucio = False
 
+        esperando_accion = False
+        inicio_espera = 0
+        tiempo_espera_actual = 0
+        progreso_espera = 0.0
+
         lista_pedidos = generar_pedidos(self.ordenes)
         lista_objetivos = expandir_objetivos(lista_pedidos)
 
@@ -95,6 +100,18 @@ class GameScene:
                 else:
                     temporizadores_restantes.append(tiempo_objetivo)
             temporizadores_sucios = temporizadores_restantes
+
+            if esperando_accion:
+                transcurrido_espera = ahora - inicio_espera
+                progreso_espera = min(1.0, transcurrido_espera / tiempo_espera_actual)
+                if transcurrido_espera >= tiempo_espera_actual:
+                    esperando_accion = False
+                    progreso_espera = 0.0
+                    index_objetivo += 1  # Avanzamos al siguiente objetivo SOLO cuando termina
+                    ruta_disponible = []
+                    ruta_objetivo = None
+                    contador_frames = 0
+                    print(f"Acción completada en {objetivo_actual}")
 
             if lavando_plato:
                 transcurrido = ahora - inicio_lavado
@@ -172,6 +189,7 @@ class GameScene:
                 objetivo_actual is not None
                 and tuple(chef_pos) == objetivo_actual
                 and not lavando_plato
+                and not esperando_accion
             ):
                 if en_reposicion_plato and buscando_plato_sucio and objetivo_actual == objetivo_platos_sucios:
                     if platos_sucios > 0:
@@ -198,15 +216,25 @@ class GameScene:
                     registrar_entrega(ahora)
                     print("Pedido entregado. Plato sucio llegará en 15s.")
 
-                index_objetivo += 1
-                if index_objetivo < len(lista_objetivos):
-                    objetivo_actual = lista_objetivos[index_objetivo]
+                if objetivo_actual in TIEMPOS_ESPERA:
+                    esperando_accion = True
+                    inicio_espera = ahora
+                    tiempo_espera_actual = TIEMPOS_ESPERA[objetivo_actual]
                     ruta_disponible = []
                     ruta_objetivo = None
                     contador_frames = 0
+                    print(f"Esperando {tiempo_espera_actual/1000}s en {objetivo_actual}...")
+                    break 
                 else:
-                    objetivo_actual = None
-                    print("Todos los pedidos completados.")
+                    index_objetivo += 1
+                    if index_objetivo < len(lista_objetivos):
+                        objetivo_actual = lista_objetivos[index_objetivo]
+                        ruta_disponible = []
+                        ruta_objetivo = None
+                        contador_frames = 0
+                    else:
+                        objetivo_actual = None
+                        print("Todos los pedidos completados.")
 
             if objetivo_actual is not None and not es_objetivo_valido(objetivo_actual):
                 print(f"Objetivo invalido ({objetivo_actual}), se omite.")
@@ -257,6 +285,8 @@ class GameScene:
                 platos_sucios,
                 lavando_plato,
                 progreso_lavado,
+                esperando_accion,  # <- NUEVO
+                progreso_espera    # <- NUEVO
             )
             
             self.ventana.blit(self.pantalla_virtual, (0, 0))

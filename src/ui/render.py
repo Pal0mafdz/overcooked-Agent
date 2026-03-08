@@ -25,6 +25,8 @@ def render_frame(
     platos_sucios: int,
     lavando_plato: bool,
     progreso_lavado: float,
+    esperando_accion: bool = False, 
+    progreso_espera: float = 0.0    
 ):
     ventana.fill((0, 0, 0))
     fuente_coord = pygame.font.SysFont(None, 20)
@@ -75,3 +77,12 @@ def render_frame(
         pygame.draw.rect(ventana, (40, 40, 40), (barra_x, barra_y, barra_w, barra_h))
         pygame.draw.rect(ventana, (120, 220, 120), (barra_x, barra_y, int(barra_w * progreso_lavado), barra_h))
         pygame.draw.rect(ventana, (220, 220, 220), (barra_x, barra_y, barra_w, barra_h), 1)
+
+    if esperando_accion:
+        barra_acc_x = chef_pos[0] * tam_celda
+        barra_acc_y = chef_pos[1] * tam_celda - 12 
+        barra_acc_w = tam_celda
+        barra_acc_h = 8
+        pygame.draw.rect(ventana, (40, 40, 40), (barra_acc_x, barra_acc_y, barra_acc_w, barra_acc_h))
+        pygame.draw.rect(ventana, (255, 165, 0), (barra_acc_x, barra_acc_y, int(barra_acc_w * progreso_espera), barra_acc_h))
+        pygame.draw.rect(ventana, (220, 220, 220), (barra_acc_x, barra_acc_y, barra_acc_w, barra_acc_h), 1)
