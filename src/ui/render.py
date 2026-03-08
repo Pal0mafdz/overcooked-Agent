@@ -21,6 +21,8 @@ def render_frame(
     zonas_olor: list[tuple[int, int]],
     pozo_descubierto: bool,
     pozos_pos: list[tuple[int, int]],
+    pisos_lentos: list[tuple[int, int]],
+
     platos_limpios: int,
     platos_sucios: int,
     lavando_plato: bool,
@@ -37,6 +39,14 @@ def render_frame(
             color_celda = COLOR_SUELO if mapa_actual[fila][col] == 1 else COLOR_MURO
             pygame.draw.rect(ventana, color_celda, (x, y, tam_celda, tam_celda))
             pygame.draw.rect(ventana, COLOR_REJILLA, (x, y, tam_celda, tam_celda), 1)
+
+
+    for (x, y) in pisos_lentos:
+        pygame.draw.rect(
+            ventana,
+            (100, 180, 255), 
+            (x * tam_celda, y * tam_celda, tam_celda, tam_celda),
+     )
 
     for col in range(ancho_grid):
         texto_col = fuente_coord.render(str(col), True, (255, 255, 255))
