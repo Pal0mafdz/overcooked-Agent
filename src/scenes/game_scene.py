@@ -136,11 +136,8 @@ class GameScene:
 
                 if evento.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = pygame.mouse.get_pos()
-                    
-                    mx_real = int(mx * self.ancho_logico / 950)
-                    my_real = int(my * self.alto_logico / 650)
-                    
-                    cx, cy = mx_real // TAM_CELDA, my_real // TAM_CELDA
+
+                    cx, cy = mx // TAM_CELDA, my // TAM_CELDA
                     if 0 <= cx < ANCHO_GRID and 0 <= cy < ALTO_GRID:
                         if mapa_actual[cy][cx] == 1:
                             if evento.button == 3:
@@ -262,9 +259,7 @@ class GameScene:
                 progreso_lavado,
             )
             
-            superficie_escalada = pygame.transform.smoothscale(self.pantalla_virtual, (950, 650))
-            
-            self.ventana.blit(superficie_escalada, (0, 0))
+            self.ventana.blit(self.pantalla_virtual, (0, 0))
             
             pygame.display.flip()
             self.reloj.tick(60)
