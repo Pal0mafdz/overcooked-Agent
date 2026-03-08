@@ -55,19 +55,11 @@ def render_frame(
     dibujar_objetivos(ventana, tam_celda)
 
     for olor in zonas_olor:
-        pygame.draw.rect(
-            ventana,
-            (180, 180, 80),
-            (olor[0] * tam_celda + 4, olor[1] * tam_celda + 4, tam_celda - 8, tam_celda - 8),
-        )
+        pygame.draw.rect(ventana, (180, 180, 80), (olor[0] * tam_celda + 4, olor[1] * tam_celda + 4, tam_celda - 8, tam_celda - 8))
 
     if pozo_descubierto:
         for (px, py) in pozos_pos:
-            pygame.draw.rect(
-                ventana,
-                (0, 0, 0),
-                (px * tam_celda + 10, py * tam_celda + 10, tam_celda - 20, tam_celda - 20),
-            )
+            pygame.draw.rect(ventana, (0, 0, 0), (px * tam_celda + 10, py * tam_celda + 10, tam_celda - 20, tam_celda - 20))
 
     for rx, ry in ruta_disponible:
         pygame.draw.rect(ventana, COLOR_RUTA, (rx * tam_celda + 2, ry * tam_celda, 60, 60))
