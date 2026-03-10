@@ -3,9 +3,10 @@ import pygame
 
 from config import TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO, TIEMPOS_ESPERA
 from src.systems.maps import MAPA_ORIGINAL, generar_pozos_y_olores
-from src.systems.orders import PLATOS, ENTREGAS, generar_pedidos, expandir_objetivos
+from src.systems.orders import PLATOS, ENTREGAS, generar_pedidos, expandir_objetivos, generar_objetivos_interceptor
 from src.systems.pathfinding import Pathfinder
 from src.ui.render import render_frame
+from src.entities.interceptor import Interceptor
 from src.systems.maps import generar_pisos_lentos
 
 class GameScene:
@@ -62,6 +63,9 @@ class GameScene:
 
         lista_pedidos = generar_pedidos(self.ordenes)
         lista_objetivos = expandir_objetivos(lista_pedidos)
+        
+        # Generar objetivos independientes para el interceptor
+        lista_objetivos_interceptor = generar_objetivos_interceptor(self.ordenes)
 
         pozos_pos, zonas_olor = generar_pozos_y_olores(
             mapa_actual,
@@ -99,11 +103,27 @@ class GameScene:
         print("NUEVA SIMULACIÓN INICIADA")
         print(f"DEBUG: Pozos generados en {pozos_pos}")
         if lista_pedidos:
-            print(f"Pedidos: {lista_pedidos}")
+            print(f"Pedidos Chef: {lista_pedidos}")
+            print(f"Objetivos Chef: {lista_objetivos}")
+            print(f"Objetivos Interceptor: {lista_objetivos_interceptor}")
             print(f"Pedido actual: {lista_pedidos[0]}")
         print("=" * 40 + "\n")
 
         pathfinder = Pathfinder(mapa_actual)
+
+        # Interceptor: instancia separada que maneja su ruta y estados
+        def encontrar_celda_libre(mapa, evitar: set | None = None):
+            evitar = set(evitar or [])
+            for y in range(len(mapa)):
+                for x in range(len(mapa[0])):
+                    if mapa[y][x] == 1 and (x, y) not in evitar and (x, y) != tuple(chef_pos):
+                        return [x, y]
+            return [1, 3]
+
+        interceptor_start = encontrar_celda_libre(mapa_actual, evitar=set(lista_objetivos))
+        # El interceptor usa su propia lista de objetivos para evitar traslape con el chef
+        interceptor = Interceptor(interceptor_start, mapa_actual, lista_objetivos_interceptor)
+        chef_freeze_until = 0
 
         def es_objetivo_valido(valor) -> bool:
             return (
@@ -158,6 +178,8 @@ class GameScene:
                     ruta_objetivo = None
                     contador_frames = 0
                     print(f"Lavado completado. Platos limpios disponibles: {platos_limpios}")
+
+            
 
             if index_objetivo < len(lista_objetivos):
                 objetivo_actual = lista_objetivos[index_objetivo]
@@ -295,7 +317,7 @@ class GameScene:
                 velcodad_actual = VELOCIDAD_MOVIMIENTO
                 if tuple(chef_pos) in zona_lenta:
                     velcodad_actual = VELOCIDAD_MOVIMIENTO * 3
-                if contador_frames >= velcodad_actual:
+                if contador_frames >= velcodad_actual and ahora >= chef_freeze_until:
                     siguiente_paso = ruta_disponible.pop(0)
                     chef_pos[0], chef_pos[1] = siguiente_paso[0], siguiente_paso[1]
                     contador_frames = 0
@@ -304,6 +326,68 @@ class GameScene:
                         print(f"Destino: {chef_pos}")
                         if objetivo_actual is not None and tuple(chef_pos) == objetivo_actual:
                             ruta_objetivo = None
+
+            # Interceptor update (mueve y devuelve eventos)
+            eventos = interceptor.update(
+                ahora,
+                chef_pos,
+                ruta_disponible,
+                mapa_actual,
+                lista_objetivos_interceptor,
+                zona_lenta,
+                tiempo_lavado_ms,
+                VELOCIDAD_MOVIMIENTO,
+                TIEMPOS_ESPERA,
+            )
+
+            ruta_interceptor = interceptor.ruta
+            interceptor_pos = interceptor.pos
+
+            if 'freeze_until' in eventos:
+                chef_freeze_until = eventos['freeze_until']
+                print("Interceptor adjacent: congelando al chef")
+                # Pausar temporizadores del chef durante la congelación (no cancelarlos)
+                freeze_dur = chef_freeze_until - ahora
+                if esperando_accion:
+                    inicio_espera += freeze_dur
+                    print("Pausando progreso de espera del chef durante la congelación.")
+                if lavando_plato:
+                    inicio_lavado += freeze_dur
+                    print("Pausando progreso de lavado del chef durante la congelación.")
+
+            if 'arrived' in eventos:
+                objetivo_interceptor = eventos['arrived']
+                if objetivo_interceptor in TIEMPOS_ESPERA:
+                    interceptor.start_wait(TIEMPOS_ESPERA[objetivo_interceptor], ahora)
+                    print(f"Interceptor esperando {TIEMPOS_ESPERA[objetivo_interceptor]/1000}s en {objetivo_interceptor}...")
+                else:
+                    if objetivo_interceptor == objetivo_platos_sucios:
+                        if platos_sucios > 0:
+                            platos_sucios -= 1
+                            print(f"Interceptor recogió plato sucio en {objetivo_interceptor}. Sucios restantes: {platos_sucios}")
+                            interceptor.advance_objetivo()
+                    elif objetivo_interceptor == objetivo_lavado:
+                        interceptor.start_washing(ahora)
+                        print("Interceptor lavando plato...")
+                    elif objetivo_interceptor in PLATOS:
+                        if platos_limpios > 0:
+                            platos_limpios -= 1
+                            print(f"Interceptor tomó plato limpio en {objetivo_interceptor}. Platos limpios restantes: {platos_limpios}")
+                            interceptor.advance_objetivo()
+                    elif objetivo_interceptor in ENTREGAS:
+                        registrar_entrega(ahora)
+                        print("Interceptor entregó un pedido. Platos sucios llegarán pronto.")
+                        interceptor.advance_objetivo()
+
+            if 'washer_done' in eventos:
+                platos_limpios += 1
+                print(f"Interceptor completó lavado. Platos limpios disponibles: {platos_limpios}")
+
+            # preparar datos visuales del interceptor para el renderer
+            interceptor_lavando = interceptor.lavando
+            interceptor_progreso_lavado = interceptor.progreso_lavado
+            interceptor_esperando = interceptor.esperando
+            interceptor_progreso_espera = getattr(interceptor, 'progreso_espera', 0.0)
 
             render_frame(
                 self.pantalla_virtual, 
@@ -321,9 +405,19 @@ class GameScene:
                 platos_sucios,
                 lavando_plato,
                 progreso_lavado,
+                interceptor_pos,
+                ruta_interceptor,
+                interceptor_lavando,
+                interceptor_progreso_lavado,
+                interceptor_esperando,
+                interceptor_progreso_espera,
                 esperando_accion,  # <- NUEVO
-                progreso_espera    # <- NUEVO
+                progreso_espera,   # <- NUEVO
+                chef_freeze_until,
+                ahora,
+                ('freeze_until' in eventos),
             )
+            
             
             self.ventana.blit(self.pantalla_virtual, (0, 0))
             

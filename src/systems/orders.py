@@ -45,3 +45,45 @@ def expandir_objetivos(pedidos: list[str]) -> list[tuple[int, int]]:
             secuencia[-1] = random.choice(ENTREGAS)
         objetivos.extend(secuencia)
     return objetivos
+
+
+def generar_objetivos_interceptor(ordenes: int, rng: random.Random | None = None) -> list[tuple[int, int]]:
+    """
+    Genera una secuencia de objetivos independiente para el interceptor.
+    Usa una distribución diferente de pedidos para evitar traslape con el chef.
+    """
+    rng = rng or random
+    
+    # Generar pedidos con distribución invertida para maximizar diferenciación
+    pedidos_interceptor = []
+    
+    # Si el chef podría generar mostly random, el interceptor usa patrón opuesto
+    for i in range(ordenes):
+        # Invertir el patrón: posiciones pares = sopa, impares = sopa_tomate
+        if i % 2 == 0:
+            pedidos_interceptor.append("sopa")
+        else:
+            pedidos_interceptor.append("sopa_tomate")
+    
+    # Mezclar los pedidos para mayor aleatoriedad pero manteniendo diversidad
+    rng.shuffle(pedidos_interceptor)
+    
+    # Expandir objetivos con variaciones adicionales
+    objetivos = []
+    for i, pedido in enumerate(pedidos_interceptor):
+        secuencia_con_desc = OBJETIVOS_POR_PEDIDO[pedido]
+        secuencia = [coord for coord, desc in secuencia_con_desc]
+
+        if (3, 3) in secuencia:
+            idx = secuencia.index((3, 3))
+            # Usar diferentes platos para el interceptor basado en índice
+            plato_coord = PLATOS[i % len(PLATOS)]
+            secuencia.insert(idx + 1, plato_coord)
+            secuencia.insert(idx + 2, (3, 3))
+
+        if secuencia and secuencia[-1] == (16, 4):
+            # Alternar puntos de entrega para evitar coincidencias
+            secuencia[-1] = ENTREGAS[i % len(ENTREGAS)]
+        objetivos.extend(secuencia)
+    
+    return objetivos
