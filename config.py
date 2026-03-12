@@ -22,23 +22,6 @@ COLOR_ENTREGA = (146, 127, 121)
 COLOR_RECOGE_PLATOS = (41, 29, 36)
 COLOR_PLATO = (255,255,240)
 
-
-def dibujar_objetivos(ventana, tam_celda):
-    pygame.draw.rect(ventana, COLOR_TOMATE, (13 * tam_celda, 8 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_CEBOLLA, (15 * tam_celda, 8 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_TABLA_CORTAR, (3 * tam_celda, 8 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_TABLA_CORTAR, (5 * tam_celda, 8 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_OLLAS, (3 * tam_celda, 2 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_OLLAS, (5 * tam_celda, 2 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_LAVA_PLATOS, (0 * tam_celda, 6 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_BASURA, (16 * tam_celda, 2 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_ENTREGA, (17 * tam_celda, 4 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_ENTREGA, (17 * tam_celda, 5 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_RECOGE_PLATOS, (17 * tam_celda, 6 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_PLATO, (0 * tam_celda, 5 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_PLATO, (0 * tam_celda, 4 * tam_celda, tam_celda, tam_celda))
-    pygame.draw.rect(ventana, COLOR_PLATO, (0 * tam_celda, 3 * tam_celda, tam_celda, tam_celda))
-
 TIEMPOS_ESPERA = {
     (13, 7): 1000,   # Ir por tomate (1 segundo)
     (15, 7): 1000,   # Ir por cebolla (1 segundo)

@@ -21,6 +21,7 @@ class Interceptor:
         self.index_objetivo = 0
 
         self.contador_frames = 0
+        self.direccion = 0  # 0: Abajo, 1: Arriba, 2: Derecha, 3: Izquierda
 
         # estados de acción
         self.lavando = False
@@ -146,6 +147,16 @@ class Interceptor:
                 vel = velocidad_movimiento * 3
             if self.contador_frames >= vel:
                 siguiente = self.ruta.pop(0)
+
+                if siguiente[0] > self.pos[0]:
+                    self.direccion = 2
+                elif siguiente[0] < self.pos[0]:
+                    self.direccion = 3
+                elif siguiente[1] < self.pos[1]:
+                    self.direccion = 1
+                elif siguiente[1] > self.pos[1]:
+                    self.direccion = 0
+
                 self.pos[0], self.pos[1] = siguiente[0], siguiente[1]
                 self.contador_frames = 0
                 if not self.ruta:

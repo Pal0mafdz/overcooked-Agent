@@ -1,7 +1,11 @@
 import copy
 import pygame
+import pytmx
 
-from config import TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO, TIEMPOS_ESPERA
+from config import (
+    TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO, TIEMPOS_ESPERA,
+    COLOR_SUELO, COLOR_MURO, COLOR_REJILLA
+)
 from src.systems.maps import MAPA_ORIGINAL, generar_pozos_y_olores
 from src.systems.orders import PLATOS, ENTREGAS, generar_pedidos, expandir_objetivos, generar_objetivos_interceptor
 from src.systems.pathfinding import Pathfinder
@@ -20,15 +24,70 @@ class GameScene:
         self.alto_logico = ALTO_GRID * TAM_CELDA
         self.pantalla_virtual = pygame.Surface((self.ancho_logico, self.alto_logico))
         
-        # --- CARGAR IMÁGENES ---
-        self.img_escenario = pygame.image.load("assets/escenario_2.jpg").convert()
-        self.img_escenario = pygame.transform.scale(
-            self.img_escenario, 
-            (self.ancho_logico, self.alto_logico)
-        )
+        # --- CARGAR TMX MAPA ---
+        self.tmx_data = pytmx.load_pygame("assets/map/mapa.tmx")
+        self.map_surface = pygame.Surface((self.ancho_logico, self.alto_logico))
+        self.map_surface.fill((0, 0, 0))
         
-        self.img_chef = pygame.image.load("assets/chef01_front.png").convert_alpha()
-        self.img_chef = pygame.transform.scale(self.img_chef, (TAM_CELDA, TAM_CELDA))
+        for fila in range(ALTO_GRID):
+            for col in range(ANCHO_GRID):
+                x_celda, y_celda = col * TAM_CELDA, fila * TAM_CELDA
+                color_celda = COLOR_SUELO if MAPA_ORIGINAL[fila][col] == 1 else COLOR_MURO
+                pygame.draw.rect(self.map_surface, color_celda, (x_celda, y_celda, TAM_CELDA, TAM_CELDA))
+                pygame.draw.rect(self.map_surface, COLOR_REJILLA, (x_celda, y_celda, TAM_CELDA, TAM_CELDA), 1)
+
+        for layer in self.tmx_data.visible_layers:
+            if isinstance(layer, pytmx.TiledTileLayer):
+                for x, y, gid in layer:
+                    tile = self.tmx_data.get_tile_image_by_gid(gid)
+                    if tile:
+                        scale_x = TAM_CELDA / self.tmx_data.tilewidth
+                        scale_y = TAM_CELDA / self.tmx_data.tileheight
+                        
+                        new_w = int(tile.get_width() * scale_x)
+                        new_h = int(tile.get_height() * scale_y)
+                        
+                        tile_scaled = pygame.transform.scale(tile, (new_w, new_h))
+                        
+                        blit_x = x * TAM_CELDA
+                        blit_y = y * TAM_CELDA + TAM_CELDA - new_h
+                        
+                        self.map_surface.blit(tile_scaled, (blit_x, blit_y))
+        
+        # Direcciones: 0=Abajo, 1=Arriba, 2=Derecha, 3=Izquierda
+        self.img_chef_dir = []
+        
+        img_front = pygame.image.load("assets/chef_01/chef01_front.png").convert_alpha()
+        self.img_chef_dir.append(pygame.transform.scale(img_front, (TAM_CELDA, TAM_CELDA)))
+        
+        img_back = pygame.image.load("assets/chef_01/chef01_back.png").convert_alpha()
+        self.img_chef_dir.append(pygame.transform.scale(img_back, (TAM_CELDA, TAM_CELDA)))
+        
+        img_side = pygame.image.load("assets/chef_01/chef01_side.png").convert_alpha()
+        self.img_chef_dir.append(pygame.transform.scale(img_side, (TAM_CELDA, TAM_CELDA)))
+        
+        img_side_flipped = pygame.transform.flip(img_side, True, False)
+        self.img_chef_dir.append(pygame.transform.scale(img_side_flipped, (TAM_CELDA, TAM_CELDA)))
+
+        self.img_interceptor_dir = []
+        
+        img_int_front = pygame.image.load("assets/chef_02/chef02_front.png").convert_alpha()
+        self.img_interceptor_dir.append(pygame.transform.scale(img_int_front, (TAM_CELDA, TAM_CELDA)))
+        
+        img_int_back = pygame.image.load("assets/chef_02/chef02_back.png").convert_alpha()
+        self.img_interceptor_dir.append(pygame.transform.scale(img_int_back, (TAM_CELDA, TAM_CELDA)))
+        
+        img_int_side = pygame.image.load("assets/chef_02/chef02_side.png").convert_alpha()
+        self.img_interceptor_dir.append(pygame.transform.scale(img_int_side, (TAM_CELDA, TAM_CELDA)))
+        
+        img_int_side_flipped = pygame.transform.flip(img_int_side, True, False)
+        self.img_interceptor_dir.append(pygame.transform.scale(img_int_side_flipped, (TAM_CELDA, TAM_CELDA)))
+
+        self.img_pozo = pygame.image.load("assets/obstacles/pozo.png").convert_alpha()
+        self.img_pozo = pygame.transform.scale(self.img_pozo, (TAM_CELDA, TAM_CELDA))
+
+        self.img_piso_mojado = pygame.image.load("assets/obstacles/piso_mojado.png").convert_alpha()
+        self.img_piso_mojado = pygame.transform.scale(self.img_piso_mojado, (TAM_CELDA, TAM_CELDA))
 
     def run(self) -> bool:
         objetivo_platos_sucios = (16, 6)
@@ -38,6 +97,7 @@ class GameScene:
 
         mapa_actual = copy.deepcopy(MAPA_ORIGINAL)
         chef_pos = [1, 3]
+        chef_direccion = 0  # Start facing front (down)
         ruta_disponible: list[tuple[int, int]] = []
         contador_frames = 0
         index_objetivo = 0
@@ -319,6 +379,17 @@ class GameScene:
                     velcodad_actual = VELOCIDAD_MOVIMIENTO * 3
                 if contador_frames >= velcodad_actual and ahora >= chef_freeze_until:
                     siguiente_paso = ruta_disponible.pop(0)
+
+                    # Determinar dirección
+                    if siguiente_paso[0] > chef_pos[0]:
+                        chef_direccion = 2  # Derecha
+                    elif siguiente_paso[0] < chef_pos[0]:
+                        chef_direccion = 3  # Izquierda
+                    elif siguiente_paso[1] < chef_pos[1]:
+                        chef_direccion = 1  # Arriba
+                    elif siguiente_paso[1] > chef_pos[1]:
+                        chef_direccion = 0  # Abajo
+
                     chef_pos[0], chef_pos[1] = siguiente_paso[0], siguiente_paso[1]
                     contador_frames = 0
 
@@ -416,6 +487,11 @@ class GameScene:
                 chef_freeze_until,
                 ahora,
                 ('freeze_until' in eventos),
+                self.map_surface,
+                self.img_pozo,
+                self.img_piso_mojado,
+                self.img_chef_dir[chef_direccion],
+                self.img_interceptor_dir[interceptor.direccion],
             )
             
             
