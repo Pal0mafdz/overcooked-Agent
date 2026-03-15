@@ -69,15 +69,6 @@ def render_frame(
                 (x * tam_celda, y * tam_celda, tam_celda, tam_celda),
             )
 
-    for col in range(ancho_grid):
-        texto_col = fuente_coord.render(str(col), True, (255, 255, 255))
-        x_col = col * tam_celda + (tam_celda - texto_col.get_width()) // 2
-        ventana.blit(texto_col, (x_col, 2))
-
-    for fila in range(alto_grid):
-        texto_fila = fuente_coord.render(str(fila), True, (255, 255, 255))
-        y_fila = fila * tam_celda + (tam_celda - texto_fila.get_height()) // 2
-        ventana.blit(texto_fila, (4, y_fila))
 
     texto_limpios = fuente_coord.render(f"L:{platos_limpios}", True, (200, 240, 255))
     ventana.blit(texto_limpios, (1 * tam_celda + 4, 2 * tam_celda + 4))
