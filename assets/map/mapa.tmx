@@ -1,26 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="18" height="11" tilewidth="64" tileheight="64" infinite="0" nextlayerid="23" nextobjectid="1">
- <tileset firstgid="1" source="../../../resources_tiled/barra_01.tsx"/>
- <tileset firstgid="2" source="../../../resources_tiled/barra_02.tsx"/>
- <tileset firstgid="3" source="../../../resources_tiled/barra_03.tsx"/>
- <tileset firstgid="4" source="../../../resources_tiled/barra_04.tsx"/>
- <tileset firstgid="5" source="../../../resources_tiled/barra_05.tsx"/>
- <tileset firstgid="6" source="../../../resources_tiled/barra_06.tsx"/>
- <tileset firstgid="7" source="../../../resources_tiled/lava_vajilla_01.tsx"/>
- <tileset firstgid="8" source="../../../resources_tiled/corta_ingredientes.tsx"/>
- <tileset firstgid="9" source="../../../resources_tiled/asfalto.tsx"/>
- <tileset firstgid="10" source="../../../resources_tiled/barra_07.tsx"/>
- <tileset firstgid="11" source="../../../resources_tiled/barra_cebolla.tsx"/>
- <tileset firstgid="12" source="../../../resources_tiled/barra_tomate.tsx"/>
- <tileset firstgid="13" source="../../../resources_tiled/basura.tsx"/>
- <tileset firstgid="14" source="../../../resources_tiled/barra_entrega.tsx"/>
- <tileset firstgid="15" source="../../../resources_tiled/platos_sucios.tsx"/>
- <tileset firstgid="16" source="../../../resources_tiled/cruce_peatonal.tsx"/>
- <tileset firstgid="17" source="../../../resources_tiled/calle_arriba_derecha.tsx"/>
- <tileset firstgid="39" source="../../../../../../Desktop/calle_izq_arriba.tsx"/>
- <tileset firstgid="61" source="../../../resources_tiled/calle_abajo.tsx"/>
- <tileset firstgid="97" source="../../../resources_tiled/barra_der_arriba.tsx"/>
- <tileset firstgid="101" source="../../../resources_tiled/barra_platos_izq.tsx"/>
+ <tileset firstgid="1" source="../resources_tiled/barra_01.tsx"/>
+ <tileset firstgid="2" source="../resources_tiled/barra_02.tsx"/>
+ <tileset firstgid="3" source="../resources_tiled/barra_03.tsx"/>
+ <tileset firstgid="4" source="../resources_tiled/barra_04.tsx"/>
+ <tileset firstgid="5" source="../resources_tiled/barra_05.tsx"/>
+ <tileset firstgid="6" source="../resources_tiled/barra_06.tsx"/>
+ <tileset firstgid="7" source="../resources_tiled/lava_vajilla_01.tsx"/>
+ <tileset firstgid="8" source="../resources_tiled/corta_ingredientes.tsx"/>
+ <tileset firstgid="9" source="../resources_tiled/asfalto.tsx"/>
+ <tileset firstgid="10" source="../resources_tiled/barra_07.tsx"/>
+ <tileset firstgid="11" source="../resources_tiled/barra_cebolla.tsx"/>
+ <tileset firstgid="12" source="../resources_tiled/barra_tomate.tsx"/>
+ <tileset firstgid="13" source="../resources_tiled/basura.tsx"/>
+ <tileset firstgid="14" source="../resources_tiled/barra_entrega.tsx"/>
+ <tileset firstgid="15" source="../resources_tiled/platos_sucios.tsx"/>
+ <tileset firstgid="16" source="../resources_tiled/cruce_peatonal.tsx"/>
+ <tileset firstgid="17" source="../resources_tiled/calle_arriba_derecha.tsx"/>
+ <tileset firstgid="39" source="../resources_tiled/calle_izq_arriba.tsx"/>
+ <tileset firstgid="61" source="../resources_tiled/calle_abajo.tsx"/>
+ <tileset firstgid="97" source="../resources_tiled/barra_der_arriba.tsx"/>
+ <tileset firstgid="101" source="../resources_tiled/barra_platos_izq.tsx"/>
  <layer id="8" name="BARRA_IZQ_ARRIBA" width="18" height="11">
   <data encoding="csv">
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
