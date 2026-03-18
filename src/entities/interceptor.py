@@ -2,6 +2,7 @@ import copy
 from typing import List, Tuple
 
 from src.systems.pathfinding import Pathfinder
+from src.systems.orders import OLLAS, TABLAS
 
 
 class Interceptor:
@@ -58,10 +59,11 @@ class Interceptor:
         self.inicio_espera = ahora
         self.tiempo_espera_actual = dur_ms
 
-    def update(self, ahora: int, chef_pos: List[int], ruta_chef: list[tuple[int, int]], mapa: list[list[int]], lista_objetivos: list[tuple[int, int]], zona_lenta: set, tiempo_lavado_ms: int, velocidad_movimiento: int, tiempos_espera: dict) -> dict:
+    def update(self, ahora: int, chef_pos: List[int], ruta_chef: list[tuple[int, int]], mapa: list[list[int]], lista_objetivos: list[tuple[int, int]], zona_lenta: set, tiempo_lavado_ms: int, velocidad_movimiento: int, tiempos_espera: dict, chef_objetivo=None) -> dict:
         """
         Actualiza estado del interceptor: planificación de ruta, movimiento, espera y lavado.
         Retorna dict con eventos posibles: {'freeze_until': ms, 'arrived': objetivo, 'washer_done': True}
+        chef_objetivo: la coordenada que el chef principal tiene como objetivo actual.
         """
         eventos = {}
 
@@ -102,6 +104,54 @@ class Interceptor:
 
         # planear ruta si es necesario
         if objetivo is not None and (self.ruta_objetivo != objetivo or not self.ruta):
+
+            # --- Lógica de selección de olla: evitar conflicto con el chef principal ---
+            if objetivo in OLLAS:
+                olla_alternativa = None
+                for olla in OLLAS:
+                    if olla != objetivo:
+                        olla_alternativa = olla
+                        break
+
+                chef_en_olla = (
+                    olla_alternativa is not None
+                    and (
+                        tuple(chef_pos) == objetivo
+                        or chef_objetivo == objetivo
+                    )
+                )
+
+                if chef_en_olla and olla_alternativa is not None:
+                    # Redirigir al interceptor a la olla alternativa (todos los pasos: cocinar y servir)
+                    for i in range(self.index_objetivo, len(self.lista_objetivos)):
+                        if self.lista_objetivos[i] == objetivo:
+                            self.lista_objetivos[i] = olla_alternativa
+                    objetivo = olla_alternativa
+                    print(f"Interceptor redirigido a olla alternativa {olla_alternativa}")
+
+            # --- Lógica de selección de tabla de corte: evitar conflicto con el chef principal ---
+            if objetivo in TABLAS:
+                tabla_alternativa = None
+                for tabla in TABLAS:
+                    if tabla != objetivo:
+                        tabla_alternativa = tabla
+                        break
+
+                chef_en_tabla = (
+                    tabla_alternativa is not None
+                    and (
+                        tuple(chef_pos) == objetivo
+                        or chef_objetivo == objetivo
+                    )
+                )
+
+                if chef_en_tabla and tabla_alternativa is not None:
+                    for i in range(self.index_objetivo, len(self.lista_objetivos)):
+                        if self.lista_objetivos[i] == objetivo:
+                            self.lista_objetivos[i] = tabla_alternativa
+                    objetivo = tabla_alternativa
+                    print(f"Interceptor redirigido a tabla alternativa {tabla_alternativa}")
+
             # crear mapa temporal que bloquea la ruta del chef para promover rutas distintas
             matriz_temp = copy.deepcopy(self.mapa)
             try:

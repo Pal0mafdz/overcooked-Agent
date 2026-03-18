@@ -6,6 +6,12 @@ PLATOS = [(1, 5), (1, 4), (1, 3)]
 
 ENTREGAS = [(16, 4), (16, 5)]
 
+# Dos ollas disponibles; la primera es la predeterminada
+OLLAS = [(3, 3), (5, 3)]
+
+# Dos tablas de corte disponibles; la primera es la predeterminada
+TABLAS = [(5, 7), (3, 7)]
+
 OBJETIVOS_POR_PEDIDO = {
     "sopa_tomate": [
         ((13, 7), "Ir por tomate"),

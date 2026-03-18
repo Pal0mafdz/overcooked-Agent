@@ -7,7 +7,7 @@ from config import (
     COLOR_SUELO, COLOR_MURO, COLOR_REJILLA
 )
 from src.systems.maps import MAPA_ORIGINAL, generar_pozos_y_olores
-from src.systems.orders import PLATOS, ENTREGAS, generar_pedidos, expandir_objetivos, generar_objetivos_interceptor
+from src.systems.orders import PLATOS, ENTREGAS, OLLAS, TABLAS, generar_pedidos, expandir_objetivos, generar_objetivos_interceptor
 from src.systems.pathfinding import Pathfinder
 from src.ui.render import render_frame
 from src.entities.interceptor import Interceptor
@@ -355,6 +355,68 @@ class GameScene:
                 ruta_disponible = []
                 continue
 
+            # --- Lógica para cambiar de tabla de corte si la otra está ocupada ---
+            if (
+                objetivo_actual in TABLAS
+                and not esperando_accion
+                and not lavando_plato
+            ):
+                tabla_alternativa = None
+                for tabla in TABLAS:
+                    if tabla != objetivo_actual:
+                        tabla_alternativa = tabla
+                        break
+
+                interceptor_en_tabla = (
+                    tabla_alternativa is not None
+                    and (
+                        tuple(interceptor.pos) == objetivo_actual
+                        or interceptor.ruta_objetivo == objetivo_actual
+                    )
+                )
+
+                if interceptor_en_tabla and tabla_alternativa is not None:
+                    for i in range(index_objetivo, len(lista_objetivos)):
+                        if lista_objetivos[i] == objetivo_actual:
+                            lista_objetivos[i] = tabla_alternativa
+                    objetivo_actual = tabla_alternativa
+                    ruta_disponible = []
+                    ruta_objetivo = None
+                    contador_frames = 0
+                    print(f"Chef redirigido a tabla alternativa {tabla_alternativa}")
+
+            # --- Lógica para cambiar de olla si la otra está ocupada ---
+            if (
+                objetivo_actual in OLLAS
+                and not esperando_accion
+                and not lavando_plato
+            ):
+                olla_alternativa = None
+                for olla in OLLAS:
+                    if olla != objetivo_actual:
+                        olla_alternativa = olla
+                        break
+
+                interceptor_en_olla = (
+                    olla_alternativa is not None
+                    and (
+                        tuple(interceptor.pos) == objetivo_actual
+                        or interceptor.ruta_objetivo == objetivo_actual
+                    )
+                )
+
+                if interceptor_en_olla and olla_alternativa is not None:
+                    # Cambiar TODAS las ocurrencias de la olla original en los objetivos restantes
+                    # (tanto el paso de cocinar como el de servir usan la misma coordenada de olla)
+                    for i in range(index_objetivo, len(lista_objetivos)):
+                        if lista_objetivos[i] == objetivo_actual:
+                            lista_objetivos[i] = olla_alternativa
+                    objetivo_actual = olla_alternativa
+                    ruta_disponible = []
+                    ruta_objetivo = None
+                    contador_frames = 0
+                    print(f"Chef redirigido a olla alternativa {olla_alternativa}")
+
             if (
                 not lavando_plato
                 and objetivo_actual is not None
@@ -409,6 +471,7 @@ class GameScene:
                 tiempo_lavado_ms,
                 VELOCIDAD_MOVIMIENTO,
                 TIEMPOS_ESPERA,
+                ruta_objetivo,            # <-- olla que el chef tiene como objetivo actual
             )
 
             ruta_interceptor = interceptor.ruta
