@@ -12,6 +12,9 @@ OLLAS = [(3, 3), (5, 3)]
 # Dos tablas de corte disponibles; la primera es la predeterminada
 TABLAS = [(5, 7), (3, 7)]
 
+# Celdas donde se recogen ingredientes
+INGREDIENTES = {(13, 7), (15, 7)}  # (13,7) = tomate, (15,7) = cebolla
+
 OBJETIVOS_POR_PEDIDO = {
     "sopa_tomate": [
         ((13, 7), "Ir por tomate"),
@@ -26,6 +29,12 @@ OBJETIVOS_POR_PEDIDO = {
         ((16, 4), "Entregar orden"),
     ],
 }
+
+
+def verificar_ingrediente_podrido(prob: float = 0.3, rng=None) -> bool:
+    """Retorna True si el ingrediente recogido está podrido (probabilidad aleatoria)."""
+    rng = rng or random
+    return rng.random() < prob
 
 
 def generar_pedidos(ordenes: int, rng: random.Random | None = None) -> list[str]:

@@ -7,7 +7,8 @@ from config import (
     COLOR_RUTA,
     COLOR_CHEF,
     COLOR_INTERCEPTOR,
-    COLOR_RUTA_INTERCEPTOR
+    COLOR_RUTA_INTERCEPTOR,
+    COLOR_INGREDIENTE_PODRIDO,
 )
 
 
@@ -44,6 +45,7 @@ def render_frame(
     img_piso_mojado: pygame.Surface | None = None,
     img_chef: pygame.Surface | None = None,
     img_interceptor: pygame.Surface | None = None,
+    ingrediente_podrido: bool = False,
 ):
     ventana.fill((0, 0, 0))
     fuente_coord = pygame.font.SysFont(None, 20)
@@ -171,3 +173,14 @@ def render_frame(
         fx = chef_pos[0] * tam_celda + tam_celda // 2
         fy = chef_pos[1] * tam_celda + tam_celda // 2
         pygame.draw.circle(ventana, (255, 240, 50), (fx, fy), 28, 4)
+
+    # --- Indicador de ingrediente podrido ---
+    if ingrediente_podrido:
+        # Overlay marrón semitransparente sobre la celda del chef
+        s = pygame.Surface((tam_celda, tam_celda), pygame.SRCALPHA)
+        s.fill((*COLOR_INGREDIENTE_PODRIDO, 160))
+        ventana.blit(s, (chef_pos[0] * tam_celda, chef_pos[1] * tam_celda))
+        # Texto flotante "!Podrido!" encima del chef
+        fuente_podrido = pygame.font.SysFont(None, 22)
+        texto_podrido = fuente_podrido.render("¡Podrido!", True, (255, 230, 80))
+        ventana.blit(texto_podrido, (chef_pos[0] * tam_celda + 2, chef_pos[1] * tam_celda - 20))

@@ -49,6 +49,12 @@ class Interceptor:
         self.ruta = []
         self.ruta_objetivo = None
 
+    def reinsertar_objetivo(self, objetivo: tuple):
+        """Reinserta un objetivo al frente de la lista pendiente (para reintentar ingrediente podrido)."""
+        self.lista_objetivos.insert(self.index_objetivo, objetivo)
+        self.ruta = []
+        self.ruta_objetivo = None
+
     def start_washing(self, ahora: int):
         self.lavando = True
         self.inicio_lavado = ahora

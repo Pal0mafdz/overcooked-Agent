@@ -4,10 +4,10 @@ import pytmx
 
 from config import (
     TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO, TIEMPOS_ESPERA,
-    COLOR_SUELO, COLOR_MURO, COLOR_REJILLA
+    COLOR_SUELO, COLOR_MURO, COLOR_REJILLA, PROB_INGREDIENTE_PODRIDO
 )
 from src.systems.maps import MAPA_ORIGINAL, generar_pozos_y_olores
-from src.systems.orders import PLATOS, ENTREGAS, OLLAS, TABLAS, generar_pedidos, expandir_objetivos, generar_objetivos_interceptor
+from src.systems.orders import PLATOS, ENTREGAS, OLLAS, TABLAS, INGREDIENTES, generar_pedidos, expandir_objetivos, generar_objetivos_interceptor, verificar_ingrediente_podrido
 from src.systems.pathfinding import Pathfinder
 from src.ui.render import render_frame
 from src.entities.interceptor import Interceptor
@@ -121,6 +121,9 @@ class GameScene:
         tiempo_espera_actual = 0
         progreso_espera = 0.0
 
+        ingrediente_podrido = False   # True durante el frame en que se detecta un ingrediente podrido
+        podrido_flash_until = 0       # Timestamp hasta el cual mostrar el indicador de podrido
+
         lista_pedidos = generar_pedidos(self.ordenes)
         lista_objetivos = expandir_objetivos(lista_pedidos)
         
@@ -200,6 +203,10 @@ class GameScene:
         ejecutando = True
         while ejecutando:
             ahora = pygame.time.get_ticks()
+
+            # Apagar el flash de ingrediente podrido cuando ya pasó su tiempo
+            if ahora >= podrido_flash_until:
+                ingrediente_podrido = False
 
             temporizadores_restantes: list[int] = []
             for tiempo_objetivo in temporizadores_sucios:
@@ -323,6 +330,23 @@ class GameScene:
                 if objetivo_actual in PLATOS and platos_limpios > 0:
                     platos_limpios -= 1
                     print(f"Plato limpio tomado. Platos limpios restantes: {platos_limpios}")
+
+                # --- Verificación de ingrediente podrido ---
+                if objetivo_actual in INGREDIENTES:
+                    if verificar_ingrediente_podrido(PROB_INGREDIENTE_PODRIDO):
+                        print(f"¡Ingrediente PODRIDO en {objetivo_actual}! Recogiendo de nuevo...")
+                        ingrediente_podrido = True
+                        podrido_flash_until = ahora + 1500  # Mostrar indicador 1.5s
+                        # Reinserta el objetivo para que el chef lo intente de nuevo
+                        lista_objetivos.insert(index_objetivo, objetivo_actual)
+                        # Avanzar al siguiente objetivo (que ahora es el reinsertado) sin contar el actual
+                        index_objetivo += 1
+                        ruta_disponible = []
+                        ruta_objetivo = None
+                        contador_frames = 0
+                        break
+                    else:
+                        print(f"Ingrediente fresco recogido en {objetivo_actual}.")
 
                 if objetivo_actual in ENTREGAS:
                     registrar_entrega(ahora)
@@ -513,6 +537,14 @@ class GameScene:
                         print("Interceptor entregó un pedido. Platos sucios llegarán pronto.")
                         interceptor.advance_objetivo()
 
+                    # --- Verificación de ingrediente podrido para el interceptor ---
+                    if objetivo_interceptor in INGREDIENTES:
+                        if verificar_ingrediente_podrido(PROB_INGREDIENTE_PODRIDO):
+                            print(f"¡Ingrediente PODRIDO (interceptor) en {objetivo_interceptor}! Reintentando...")
+                            interceptor.reinsertar_objetivo(objetivo_interceptor)
+                        else:
+                            print(f"Interceptor recogió ingrediente fresco en {objetivo_interceptor}.")
+
             if 'washer_done' in eventos:
                 platos_limpios += 1
                 print(f"Interceptor completó lavado. Platos limpios disponibles: {platos_limpios}")
@@ -555,6 +587,7 @@ class GameScene:
                 self.img_piso_mojado,
                 self.img_chef_dir[chef_direccion],
                 self.img_interceptor_dir[interceptor.direccion],
+                ingrediente_podrido,
             )
             
             

@@ -4,6 +4,7 @@ TAM_CELDA = 64
 ANCHO_GRID = 18
 ALTO_GRID = 11
 VELOCIDAD_MOVIMIENTO = 10
+PROB_INGREDIENTE_PODRIDO = 0.3   # Probabilidad de que un ingrediente esté podrido (0.0 - 1.0)
 
 COLOR_SUELO = (139, 115, 85)
 COLOR_MURO = (50, 50, 50)
@@ -21,6 +22,8 @@ COLOR_BASURA = (73, 110, 39)
 COLOR_ENTREGA = (146, 127, 121)
 COLOR_RECOGE_PLATOS = (41, 29, 36)
 COLOR_PLATO = (255,255,240)
+COLOR_INGREDIENTE_BUENO   = (100, 220, 100)   # Verde: ingrediente fresco
+COLOR_INGREDIENTE_PODRIDO = (120,  80,  20)   # Marrón: ingrediente podrido
 
 TIEMPOS_ESPERA = {
     (13, 7): 1000,   # Ir por tomate (1 segundo)
