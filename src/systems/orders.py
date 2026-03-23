@@ -17,15 +17,27 @@ INGREDIENTES = {(13, 7), (15, 7)}  # (13,7) = tomate, (15,7) = cebolla
 
 OBJETIVOS_POR_PEDIDO = {
     "sopa_tomate": [
-        ((13, 7), "Ir por tomate"),
-        ((5, 7), "Cortar tomate"),
-        ((3, 3), "Llevar tomate a la olla"),
+        ((13, 7), "Ir por tomate 1"),
+        ((5, 7), "Cortar tomate 1"),
+        ((3, 3), "Llevar tomate 1 a la olla"),
+        ((13, 7), "Ir por tomate 2"),
+        ((5, 7), "Cortar tomate 2"),
+        ((3, 3), "Llevar tomate 2 a la olla"),
+        ((13, 7), "Ir por tomate 3"),
+        ((5, 7), "Cortar tomate 3"),
+        ((3, 3), "Llevar tomate 3 a la olla"),
         ((16, 4), "Entregar orden"),
     ],
     "sopa": [
-        ((15, 7), "Ir por cebolla"),
-        ((5, 7), "Cortar cebolla"),
-        ((3, 3), "Llevar cebolla a la olla"),
+        ((15, 7), "Ir por cebolla 1"),
+        ((5, 7), "Cortar cebolla 1"),
+        ((3, 3), "Llevar cebolla 1 a la olla"),
+        ((15, 7), "Ir por cebolla 2"),
+        ((5, 7), "Cortar cebolla 2"),
+        ((3, 3), "Llevar cebolla 2 a la olla"),
+        ((15, 7), "Ir por cebolla 3"),
+        ((5, 7), "Cortar cebolla 3"),
+        ((3, 3), "Llevar cebolla 3 a la olla"),
         ((16, 4), "Entregar orden"),
     ],
 }
@@ -50,7 +62,8 @@ def expandir_objetivos(pedidos: list[str]) -> list[tuple[int, int]]:
         secuencia = [coord for coord, desc in secuencia_con_desc]
 
         if (3, 3) in secuencia:
-            idx = secuencia.index((3, 3))
+            # Buscar el último index() invirtiendo la lista
+            idx = len(secuencia) - 1 - secuencia[::-1].index((3, 3))
             # PLATOS ya contiene coordenadas (x, y), no (coord, descripcion)
             plato_coord = random.choice(PLATOS)
             secuencia.insert(idx + 1, plato_coord)
@@ -90,7 +103,8 @@ def generar_objetivos_interceptor(ordenes: int, rng: random.Random | None = None
         secuencia = [coord for coord, desc in secuencia_con_desc]
 
         if (3, 3) in secuencia:
-            idx = secuencia.index((3, 3))
+            # Buscar el último index() invirtiendo la lista
+            idx = len(secuencia) - 1 - secuencia[::-1].index((3, 3))
             # Usar diferentes platos para el interceptor basado en índice
             plato_coord = PLATOS[i % len(PLATOS)]
             secuencia.insert(idx + 1, plato_coord)
