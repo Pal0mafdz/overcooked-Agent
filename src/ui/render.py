@@ -46,6 +46,7 @@ def render_frame(
     img_chef: pygame.Surface | None = None,
     img_interceptor: pygame.Surface | None = None,
     ingrediente_podrido: bool = False,
+    tiempo_restante_ms: int = 0,
 ):
     ventana.fill((0, 0, 0))
     fuente_coord = pygame.font.SysFont(None, 20)
@@ -184,3 +185,15 @@ def render_frame(
         fuente_podrido = pygame.font.SysFont(None, 22)
         texto_podrido = fuente_podrido.render("¡Podrido!", True, (255, 230, 80))
         ventana.blit(texto_podrido, (chef_pos[0] * tam_celda + 2, chef_pos[1] * tam_celda - 20))
+
+    # --- Temporizador Global ---
+    if tiempo_restante_ms > 0:
+        segs_totales = tiempo_restante_ms // 1000
+        mins = segs_totales // 60
+        segs = segs_totales % 60
+        texto_timer = f"{mins:02d}:{segs:02d}"
+        fuente_timer = pygame.font.SysFont(None, 48)
+        color_t = (255, 100, 100) if segs_totales <= 30 else (255, 255, 255)
+        surf_timer = fuente_timer.render(texto_timer, True, color_t)
+        ventana.blit(surf_timer, (ancho_grid * tam_celda // 2 - surf_timer.get_width() // 2, 10))
+

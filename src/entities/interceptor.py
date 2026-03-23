@@ -111,58 +111,15 @@ class Interceptor:
         # planear ruta si es necesario
         if objetivo is not None and (self.ruta_objetivo != objetivo or not self.ruta):
 
-            # --- Lógica de selección de olla: evitar conflicto con el chef principal ---
-            if objetivo in OLLAS:
-                olla_alternativa = None
-                for olla in OLLAS:
-                    if olla != objetivo:
-                        olla_alternativa = olla
-                        break
-
-                chef_en_olla = (
-                    olla_alternativa is not None
-                    and (
-                        tuple(chef_pos) == objetivo
-                        or chef_objetivo == objetivo
-                    )
-                )
-
-                if chef_en_olla and olla_alternativa is not None:
-                    # Redirigir al interceptor a la olla alternativa (todos los pasos: cocinar y servir)
-                    for i in range(self.index_objetivo, len(self.lista_objetivos)):
-                        if self.lista_objetivos[i] == objetivo:
-                            self.lista_objetivos[i] = olla_alternativa
-                    objetivo = olla_alternativa
-                    print(f"Interceptor redirigido a olla alternativa {olla_alternativa}")
-
-            # --- Lógica de selección de tabla de corte: evitar conflicto con el chef principal ---
-            if objetivo in TABLAS:
-                tabla_alternativa = None
-                for tabla in TABLAS:
-                    if tabla != objetivo:
-                        tabla_alternativa = tabla
-                        break
-
-                chef_en_tabla = (
-                    tabla_alternativa is not None
-                    and (
-                        tuple(chef_pos) == objetivo
-                        or chef_objetivo == objetivo
-                    )
-                )
-
-                if chef_en_tabla and tabla_alternativa is not None:
-                    for i in range(self.index_objetivo, len(self.lista_objetivos)):
-                        if self.lista_objetivos[i] == objetivo:
-                            self.lista_objetivos[i] = tabla_alternativa
-                    objetivo = tabla_alternativa
-                    print(f"Interceptor redirigido a tabla alternativa {tabla_alternativa}")
-
             # crear mapa temporal que bloquea la ruta del chef para promover rutas distintas
             matriz_temp = copy.deepcopy(self.mapa)
             try:
                 # construir conjunto de celdas a bloquear: la ruta del chef
                 bloqueadas = set(ruta_chef or [])
+                
+                # Bloquear la posición actual del chef siempre (a menos que sea nuestro destino)
+                if tuple(chef_pos) != objetivo:
+                    bloqueadas.add(tuple(chef_pos))
 
                 # si estamos dentro del periodo de evitación, expandir bloqueo a vecinos
                 if ahora < self._avoid_until:
@@ -202,18 +159,24 @@ class Interceptor:
             if tuple(self.pos) in zona_lenta:
                 vel = velocidad_movimiento * 3
             if self.contador_frames >= vel:
-                siguiente = self.ruta.pop(0)
+                siguiente = self.ruta[0]
+                
+                # Recálculo dinámico si el chef obstruye el paso
+                if list(siguiente) == chef_pos:
+                    self.ruta = []
+                    self.contador_frames = 0
+                else:
+                    self.ruta.pop(0)
+                    if siguiente[0] > self.pos[0]:
+                        self.direccion = 2
+                    elif siguiente[0] < self.pos[0]:
+                        self.direccion = 3
+                    elif siguiente[1] < self.pos[1]:
+                        self.direccion = 1
+                    elif siguiente[1] > self.pos[1]:
+                        self.direccion = 0
 
-                if siguiente[0] > self.pos[0]:
-                    self.direccion = 2
-                elif siguiente[0] < self.pos[0]:
-                    self.direccion = 3
-                elif siguiente[1] < self.pos[1]:
-                    self.direccion = 1
-                elif siguiente[1] > self.pos[1]:
-                    self.direccion = 0
-
-                self.pos[0], self.pos[1] = siguiente[0], siguiente[1]
+                    self.pos[0], self.pos[1] = siguiente[0], siguiente[1]
                 self.contador_frames = 0
                 if not self.ruta:
                     eventos['arrived'] = self.ruta_objetivo

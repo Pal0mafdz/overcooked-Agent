@@ -4,7 +4,8 @@ import pytmx
 
 from config import (
     TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO, TIEMPOS_ESPERA,
-    COLOR_SUELO, COLOR_MURO, COLOR_REJILLA, PROB_INGREDIENTE_PODRIDO
+    COLOR_SUELO, COLOR_MURO, COLOR_REJILLA, PROB_INGREDIENTE_PODRIDO,
+    TIEMPO_SIMULACION_MINUTOS, INTERVALO_NUEVO_PEDIDO_SEG
 )
 from src.systems.maps import MAPA_ORIGINAL, generar_pozos_y_olores
 from src.systems.orders import PLATOS, ENTREGAS, OLLAS, TABLAS, INGREDIENTES, generar_pedidos, expandir_objetivos, generar_objetivos_interceptor, verificar_ingrediente_podrido
@@ -134,7 +135,7 @@ class GameScene:
             mapa_actual,
             chef_pos,
             lista_objetivos,
-            cantidad_pozos=2,
+            cantidad_pozos=3,
             celdas_prohibidas=PLATOS,
         )
         for (px, py) in pozos_pos:
@@ -145,7 +146,7 @@ class GameScene:
             mapa_actual,
             chef_pos,
             lista_objetivos,
-            cantidad=8,
+            cantidad=3,
             celdas_prohibidas=PLATOS,
         )
 
@@ -200,9 +201,85 @@ class GameScene:
             if total_pendiente < 3:
                 temporizadores_sucios.append(tiempo_actual + retraso_plato_sucio_ms)
 
+        inicio_simulacion = pygame.time.get_ticks()
+        duracion_max_ms = TIEMPO_SIMULACION_MINUTOS * 60 * 1000
+        siguiente_pedido_ms = inicio_simulacion + (INTERVALO_NUEVO_PEDIDO_SEG * 1000)
+        simulacion_activa = True
+
         ejecutando = True
         while ejecutando:
             ahora = pygame.time.get_ticks()
+
+            transcurrido_global = ahora - inicio_simulacion
+            if transcurrido_global >= duracion_max_ms:
+                if simulacion_activa:
+                    print(f"Simulación finalizada por tiempo ({TIEMPO_SIMULACION_MINUTOS} minutos completados). Pantalla congelada.")
+                    simulacion_activa = False
+                tiempo_restante_ms = 0
+            else:
+                tiempo_restante_ms = duracion_max_ms - transcurrido_global
+
+            if not simulacion_activa:
+                for evento in pygame.event.get():
+                    if evento.type == pygame.QUIT:
+                        return False
+                
+                interceptor_lavando = interceptor.lavando
+                interceptor_progreso_lavado = interceptor.progreso_lavado
+                interceptor_esperando = interceptor.esperando
+                interceptor_progreso_espera = getattr(interceptor, 'progreso_espera', 0.0)
+
+                render_frame(
+                    self.pantalla_virtual, 
+                    TAM_CELDA,
+                    ANCHO_GRID,
+                    ALTO_GRID,
+                    mapa_actual,
+                    chef_pos,
+                    ruta_disponible,
+                    zonas_olor,
+                    pozo_descubierto,
+                    pozos_pos,
+                    pisos_lentos,
+                    platos_limpios,
+                    platos_sucios,
+                    lavando_plato,
+                    progreso_lavado,
+                    interceptor.pos,
+                    interceptor.ruta,
+                    interceptor_lavando,
+                    interceptor_progreso_lavado,
+                    interceptor_esperando,
+                    interceptor_progreso_espera,
+                    esperando_accion, 
+                    progreso_espera,
+                    chef_freeze_until,
+                    ahora,
+                    False,
+                    self.map_surface,
+                    self.img_pozo,
+                    self.img_piso_mojado,
+                    self.img_chef_dir[chef_direccion],
+                    self.img_interceptor_dir[interceptor.direccion],
+                    ingrediente_podrido,
+                    tiempo_restante_ms,
+                )
+                
+                self.ventana.blit(self.pantalla_virtual, (0, 0))
+                pygame.display.flip()
+                self.reloj.tick(60)
+                continue
+
+            if ahora >= siguiente_pedido_ms:
+                nuevo_pedido_chef = generar_pedidos(1)
+                nuevos_objetivos_chef = expandir_objetivos(nuevo_pedido_chef)
+                lista_objetivos.extend(nuevos_objetivos_chef)
+                
+                nuevos_objetivos_int = generar_objetivos_interceptor(1)
+                interceptor.lista_objetivos.extend(nuevos_objetivos_int)
+                
+                siguiente_pedido_ms += (INTERVALO_NUEVO_PEDIDO_SEG * 1000)
+                print(f"Añadido nuevo pedido tras {INTERVALO_NUEVO_PEDIDO_SEG}s (total objetivos chef aumentados).")
 
             # Apagar el flash de ingrediente podrido cuando ya pasó su tiempo
             if ahora >= podrido_flash_until:
@@ -334,17 +411,10 @@ class GameScene:
                 # --- Verificación de ingrediente podrido ---
                 if objetivo_actual in INGREDIENTES:
                     if verificar_ingrediente_podrido(PROB_INGREDIENTE_PODRIDO):
-                        print(f"¡Ingrediente PODRIDO en {objetivo_actual}! Recogiendo de nuevo...")
+                        print(f"¡Ingrediente PODRIDO en {objetivo_actual}! Continuando pedido con él...")
                         ingrediente_podrido = True
                         podrido_flash_until = ahora + 1500  # Mostrar indicador 1.5s
-                        # Reinserta el objetivo para que el chef lo intente de nuevo
-                        lista_objetivos.insert(index_objetivo, objetivo_actual)
-                        # Avanzar al siguiente objetivo (que ahora es el reinsertado) sin contar el actual
-                        index_objetivo += 1
-                        ruta_disponible = []
-                        ruta_objetivo = None
-                        contador_frames = 0
-                        break
+                        # Antes se reinsertaba para recoger de nuevo, ahora el chef se lo queda.
                     else:
                         print(f"Ingrediente fresco recogido en {objetivo_actual}.")
 
@@ -371,82 +441,36 @@ class GameScene:
                     else:
                         objetivo_actual = None
                         print("Todos los pedidos completados.")
-
             if objetivo_actual is not None and not es_objetivo_valido(objetivo_actual):
                 print(f"Objetivo invalido ({objetivo_actual}), se omite.")
                 index_objetivo += 1
                 ruta_objetivo = None
                 ruta_disponible = []
                 continue
-
-            # --- Lógica para cambiar de tabla de corte si la otra está ocupada ---
-            if (
-                objetivo_actual in TABLAS
-                and not esperando_accion
-                and not lavando_plato
-            ):
-                tabla_alternativa = None
-                for tabla in TABLAS:
-                    if tabla != objetivo_actual:
-                        tabla_alternativa = tabla
-                        break
-
-                interceptor_en_tabla = (
-                    tabla_alternativa is not None
-                    and (
-                        tuple(interceptor.pos) == objetivo_actual
-                        or interceptor.ruta_objetivo == objetivo_actual
-                    )
-                )
-
-                if interceptor_en_tabla and tabla_alternativa is not None:
-                    for i in range(index_objetivo, len(lista_objetivos)):
-                        if lista_objetivos[i] == objetivo_actual:
-                            lista_objetivos[i] = tabla_alternativa
-                    objetivo_actual = tabla_alternativa
-                    ruta_disponible = []
-                    ruta_objetivo = None
-                    contador_frames = 0
-                    print(f"Chef redirigido a tabla alternativa {tabla_alternativa}")
-
-            # --- Lógica para cambiar de olla si la otra está ocupada ---
-            if (
-                objetivo_actual in OLLAS
-                and not esperando_accion
-                and not lavando_plato
-            ):
-                olla_alternativa = None
-                for olla in OLLAS:
-                    if olla != objetivo_actual:
-                        olla_alternativa = olla
-                        break
-
-                interceptor_en_olla = (
-                    olla_alternativa is not None
-                    and (
-                        tuple(interceptor.pos) == objetivo_actual
-                        or interceptor.ruta_objetivo == objetivo_actual
-                    )
-                )
-
-                if interceptor_en_olla and olla_alternativa is not None:
-                    # Cambiar TODAS las ocurrencias de la olla original en los objetivos restantes
-                    # (tanto el paso de cocinar como el de servir usan la misma coordenada de olla)
-                    for i in range(index_objetivo, len(lista_objetivos)):
-                        if lista_objetivos[i] == objetivo_actual:
-                            lista_objetivos[i] = olla_alternativa
-                    objetivo_actual = olla_alternativa
-                    ruta_disponible = []
-                    ruta_objetivo = None
-                    contador_frames = 0
-                    print(f"Chef redirigido a olla alternativa {olla_alternativa}")
-
             if (
                 not lavando_plato
                 and objetivo_actual is not None
                 and (ruta_objetivo != objetivo_actual or not ruta_disponible)
             ):
+                # Bloquear posición actual del interceptor temporalmente
+                ix, iy = interceptor.pos
+                val_original = mapa_actual[iy][ix]
+                if tuple(interceptor.pos) != objetivo_actual:
+                    mapa_actual[iy][ix] = 0
+                pathfinder.set_matrix(mapa_actual)
+
                 ruta_disponible = pathfinder.obtener_ruta(chef_pos, objetivo_actual)
+
+                # Fallback: intentar sin bloquear si no hubo ruta
+                if not ruta_disponible and val_original == 1 and tuple(interceptor.pos) != objetivo_actual:
+                    mapa_actual[iy][ix] = 1
+                    pathfinder.set_matrix(mapa_actual)
+                    ruta_disponible = pathfinder.obtener_ruta(chef_pos, objetivo_actual)
+
+                # Siempre restaurar el valor original
+                mapa_actual[iy][ix] = val_original
+                pathfinder.set_matrix(mapa_actual)
+
                 ruta_objetivo = objetivo_actual
                 contador_frames = 0
 
@@ -464,20 +488,27 @@ class GameScene:
                 if tuple(chef_pos) in zona_lenta:
                     velcodad_actual = VELOCIDAD_MOVIMIENTO * 3
                 if contador_frames >= velcodad_actual and ahora >= chef_freeze_until:
-                    siguiente_paso = ruta_disponible.pop(0)
+                    siguiente_paso = ruta_disponible[0]
 
-                    # Determinar dirección
-                    if siguiente_paso[0] > chef_pos[0]:
-                        chef_direccion = 2  # Derecha
-                    elif siguiente_paso[0] < chef_pos[0]:
-                        chef_direccion = 3  # Izquierda
-                    elif siguiente_paso[1] < chef_pos[1]:
-                        chef_direccion = 1  # Arriba
-                    elif siguiente_paso[1] > chef_pos[1]:
-                        chef_direccion = 0  # Abajo
+                    # Recálculo dinámico si el interceptor está en el siguiente paso
+                    if list(siguiente_paso) == interceptor.pos:
+                        ruta_disponible = []
+                        contador_frames = 0
+                    else:
+                        siguiente_paso = ruta_disponible.pop(0)
 
-                    chef_pos[0], chef_pos[1] = siguiente_paso[0], siguiente_paso[1]
-                    contador_frames = 0
+                        # Determinar dirección
+                        if siguiente_paso[0] > chef_pos[0]:
+                            chef_direccion = 2  # Derecha
+                        elif siguiente_paso[0] < chef_pos[0]:
+                            chef_direccion = 3  # Izquierda
+                        elif siguiente_paso[1] < chef_pos[1]:
+                            chef_direccion = 1  # Arriba
+                        elif siguiente_paso[1] > chef_pos[1]:
+                            chef_direccion = 0  # Abajo
+
+                        chef_pos[0], chef_pos[1] = siguiente_paso[0], siguiente_paso[1]
+                        contador_frames = 0
 
                     if not ruta_disponible:
                         print(f"Destino: {chef_pos}")
@@ -540,8 +571,8 @@ class GameScene:
                     # --- Verificación de ingrediente podrido para el interceptor ---
                     if objetivo_interceptor in INGREDIENTES:
                         if verificar_ingrediente_podrido(PROB_INGREDIENTE_PODRIDO):
-                            print(f"¡Ingrediente PODRIDO (interceptor) en {objetivo_interceptor}! Reintentando...")
-                            interceptor.reinsertar_objetivo(objetivo_interceptor)
+                            print(f"¡Ingrediente PODRIDO en {objetivo_interceptor}! Interceptor continúa pedido con él...")
+                            # Antes se usaba interceptor.reinsertar_objetivo(), ahora se lo queda.
                         else:
                             print(f"Interceptor recogió ingrediente fresco en {objetivo_interceptor}.")
 
@@ -588,6 +619,7 @@ class GameScene:
                 self.img_chef_dir[chef_direccion],
                 self.img_interceptor_dir[interceptor.direccion],
                 ingrediente_podrido,
+                tiempo_restante_ms,
             )
             
             

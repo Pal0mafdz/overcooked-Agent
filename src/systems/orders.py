@@ -56,18 +56,27 @@ def generar_pedidos(ordenes: int, rng: random.Random | None = None) -> list[str]
 
 def expandir_objetivos(pedidos: list[str]) -> list[tuple[int, int]]:
     objetivos: list[tuple[int, int]] = []
-    for pedido in pedidos:
-        # Extraer solo las coordenadas para la lógica, descartando la descripción
-        secuencia_con_desc = OBJETIVOS_POR_PEDIDO[pedido]
-        secuencia = [coord for coord, desc in secuencia_con_desc]
+    # Chef 1: Olla 1 (3, 3) y Tabla 1 (5, 7)
+    olla_asignada = (3, 3)
+    tabla_asignada = (5, 7)
 
-        if (3, 3) in secuencia:
+    for pedido in pedidos:
+        secuencia_con_desc = OBJETIVOS_POR_PEDIDO[pedido]
+        secuencia = []
+        for coord, desc in secuencia_con_desc:
+            if coord == (3, 3):
+                secuencia.append(olla_asignada)
+            elif coord == (5, 7):
+                secuencia.append(tabla_asignada)
+            else:
+                secuencia.append(coord)
+
+        if olla_asignada in secuencia:
             # Buscar el último index() invirtiendo la lista
-            idx = len(secuencia) - 1 - secuencia[::-1].index((3, 3))
-            # PLATOS ya contiene coordenadas (x, y), no (coord, descripcion)
+            idx = len(secuencia) - 1 - secuencia[::-1].index(olla_asignada)
             plato_coord = random.choice(PLATOS)
             secuencia.insert(idx + 1, plato_coord)
-            secuencia.insert(idx + 2, (3, 3))
+            secuencia.insert(idx + 2, olla_asignada)
 
         if secuencia and secuencia[-1] == (16, 4):
             secuencia[-1] = random.choice(ENTREGAS)
@@ -93,6 +102,10 @@ def generar_objetivos_interceptor(ordenes: int, rng: random.Random | None = None
         else:
             pedidos_interceptor.append("sopa_tomate")
     
+    # Interceptor: Olla 2 (5, 3) y Tabla 2 (3, 7)
+    olla_asignada = (5, 3)
+    tabla_asignada = (3, 7)
+
     # Mezclar los pedidos para mayor aleatoriedad pero manteniendo diversidad
     rng.shuffle(pedidos_interceptor)
     
@@ -100,15 +113,22 @@ def generar_objetivos_interceptor(ordenes: int, rng: random.Random | None = None
     objetivos = []
     for i, pedido in enumerate(pedidos_interceptor):
         secuencia_con_desc = OBJETIVOS_POR_PEDIDO[pedido]
-        secuencia = [coord for coord, desc in secuencia_con_desc]
+        secuencia = []
+        for coord, desc in secuencia_con_desc:
+            if coord == (3, 3):
+                secuencia.append(olla_asignada)
+            elif coord == (5, 7):
+                secuencia.append(tabla_asignada)
+            else:
+                secuencia.append(coord)
 
-        if (3, 3) in secuencia:
+        if olla_asignada in secuencia:
             # Buscar el último index() invirtiendo la lista
-            idx = len(secuencia) - 1 - secuencia[::-1].index((3, 3))
+            idx = len(secuencia) - 1 - secuencia[::-1].index(olla_asignada)
             # Usar diferentes platos para el interceptor basado en índice
             plato_coord = PLATOS[i % len(PLATOS)]
             secuencia.insert(idx + 1, plato_coord)
-            secuencia.insert(idx + 2, (3, 3))
+            secuencia.insert(idx + 2, olla_asignada)
 
         if secuencia and secuencia[-1] == (16, 4):
             # Alternar puntos de entrega para evitar coincidencias
