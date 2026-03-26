@@ -47,6 +47,11 @@ def render_frame(
     img_interceptor: pygame.Surface | None = None,
     ingrediente_podrido: bool = False,
     tiempo_restante_ms: int = 0,
+    resumen_entrega: str | None = None,
+    resumen_entrega_until: int = 0,
+    mostrar_tiempo_agotado: bool = False,
+    mostrar_resumen_final: bool = False,
+    resumen_final_lineas: list[str] | None = None,
 ):
     ventana.fill((0, 0, 0))
     fuente_coord = pygame.font.SysFont(None, 20)
@@ -196,4 +201,87 @@ def render_frame(
         color_t = (255, 100, 100) if segs_totales <= 30 else (255, 255, 255)
         surf_timer = fuente_timer.render(texto_timer, True, color_t)
         ventana.blit(surf_timer, (ancho_grid * tam_celda // 2 - surf_timer.get_width() // 2, 10))
+
+    # --- Resumen de entrega (esquina inferior derecha) ---
+    if resumen_entrega and (resumen_entrega_until == 0 or ahora <= resumen_entrega_until):
+        panel_w = int(tam_celda * 8.3)
+        panel_h = int(tam_celda * 3.1)
+        panel_x = ancho_grid * tam_celda - panel_w - 12
+        panel_y = alto_grid * tam_celda - panel_h - 12
+
+        panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        panel.fill((18, 24, 30, 220))
+        ventana.blit(panel, (panel_x, panel_y))
+        pygame.draw.rect(ventana, (255, 210, 90), (panel_x, panel_y, panel_w, panel_h), 2)
+
+        fuente_titulo = pygame.font.SysFont(None, 36)
+        fuente_detalle = pygame.font.SysFont(None, 26)
+        titulo = fuente_titulo.render("Entrega", True, (255, 225, 120))
+        ventana.blit(titulo, (panel_x + 10, panel_y + 8))
+
+        max_detalle_w = panel_w - 20
+        palabras = resumen_entrega.split(" ")
+        lineas: list[str] = []
+        actual = ""
+        for palabra in palabras:
+            candidato = palabra if not actual else f"{actual} {palabra}"
+            if fuente_detalle.size(candidato)[0] <= max_detalle_w:
+                actual = candidato
+            else:
+                if actual:
+                    lineas.append(actual)
+                actual = palabra
+        if actual:
+            lineas.append(actual)
+
+        y_linea = panel_y + 52
+        max_lineas = 4
+        for linea in lineas[:max_lineas]:
+            surf = fuente_detalle.render(linea, True, (235, 240, 245))
+            ventana.blit(surf, (panel_x + 10, y_linea))
+            y_linea += 27
+
+    if mostrar_tiempo_agotado:
+        overlay = pygame.Surface((ancho_grid * tam_celda, alto_grid * tam_celda), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 130))
+        ventana.blit(overlay, (0, 0))
+
+        fuente_tiempo = pygame.font.SysFont(None, 130)
+        texto_tiempo = fuente_tiempo.render("¡TIEMPO!", True, (255, 80, 80))
+        sombra = fuente_tiempo.render("¡TIEMPO!", True, (20, 20, 20))
+        cx = ancho_grid * tam_celda // 2
+        cy = alto_grid * tam_celda // 2
+        ventana.blit(sombra, (cx - sombra.get_width() // 2 + 4, cy - sombra.get_height() // 2 + 4))
+        ventana.blit(texto_tiempo, (cx - texto_tiempo.get_width() // 2, cy - texto_tiempo.get_height() // 2))
+
+    if mostrar_resumen_final and resumen_final_lineas:
+        overlay = pygame.Surface((ancho_grid * tam_celda, alto_grid * tam_celda), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 165))
+        ventana.blit(overlay, (0, 0))
+
+        panel_w = int(ancho_grid * tam_celda * 0.78)
+        panel_h = int(alto_grid * tam_celda * 0.74)
+        panel_x = (ancho_grid * tam_celda - panel_w) // 2
+        panel_y = (alto_grid * tam_celda - panel_h) // 2
+
+        panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        panel.fill((17, 22, 28, 235))
+        ventana.blit(panel, (panel_x, panel_y))
+        pygame.draw.rect(ventana, (255, 210, 90), (panel_x, panel_y, panel_w, panel_h), 3)
+
+        fuente_titulo = pygame.font.SysFont(None, 52)
+        fuente_linea = pygame.font.SysFont(None, 32)
+        fuente_hint = pygame.font.SysFont(None, 26)
+
+        titulo = fuente_titulo.render("Resumen Final", True, (255, 225, 120))
+        ventana.blit(titulo, (panel_x + (panel_w - titulo.get_width()) // 2, panel_y + 18))
+
+        y = panel_y + 92
+        for linea in resumen_final_lineas[:10]:
+            surf = fuente_linea.render(linea, True, (235, 240, 245))
+            ventana.blit(surf, (panel_x + 28, y))
+            y += 36
+
+        hint = fuente_hint.render("ESC para salir | R para reiniciar", True, (200, 205, 210))
+        ventana.blit(hint, (panel_x + panel_w - hint.get_width() - 20, panel_y + panel_h - 36))
 

@@ -8,7 +8,20 @@ from config import (
     TIEMPO_SIMULACION_MINUTOS, INTERVALO_NUEVO_PEDIDO_SEG
 )
 from src.systems.maps import MAPA_ORIGINAL, generar_pozos_y_olores
-from src.systems.orders import PLATOS, ENTREGAS, OLLAS, TABLAS, INGREDIENTES, generar_pedidos, expandir_objetivos, generar_objetivos_interceptor, verificar_ingrediente_podrido
+from src.systems.orders import (
+    PLATOS,
+    ENTREGAS,
+    OLLAS,
+    TABLAS,
+    INGREDIENTES,
+    generar_pedidos,
+    expandir_objetivos,
+    generar_objetivos_interceptor,
+    verificar_ingrediente_podrido,
+    calcular_puntaje_comida,
+    calcular_limpieza_por_platos,
+    evaluar_propina_difusa,
+)
 from src.systems.pathfinding import Pathfinder
 from src.ui.render import render_frame
 from src.entities.interceptor import Interceptor
@@ -125,6 +138,56 @@ class GameScene:
         ingrediente_podrido = False   # True durante el frame en que se detecta un ingrediente podrido
         podrido_flash_until = 0       # Timestamp hasta el cual mostrar el indicador de podrido
 
+        ingredientes_platillo_chef = 0
+        podridos_platillo_chef = 0
+        inicio_platillo_chef = 0
+
+        ingredientes_platillo_interceptor = 0
+        podridos_platillo_interceptor = 0
+        inicio_platillo_interceptor = 0
+
+        resumen_entrega = ""
+        resumen_entrega_until = 0
+        mostrar_tiempo_agotado_until = 0
+        resumen_final_lineas: list[str] = []
+        mostrar_resumen_final = False
+
+        entregas_chef = 0
+        entregas_interceptor = 0
+        propinas_totales_monedas = 0
+        acumulado_comida = 0.0
+        acumulado_limpieza = 0.0
+        acumulado_tiempo = 0.0
+        acumulado_podridos = 0
+        acumulado_ingredientes = 0
+
+        def limpieza_a_palabra(limpieza_num: float) -> str:
+            if limpieza_num >= 80:
+                return "Asquerosa"
+            if limpieza_num >= 50:
+                return "Descuidada"
+            if limpieza_num >= 15:
+                return "Aceptable"
+            return "Impecable"
+
+        def construir_resumen_final() -> list[str]:
+            total_entregas = entregas_chef + entregas_interceptor
+            prom_comida = (acumulado_comida / total_entregas) if total_entregas else 0.0
+            prom_limpieza = (acumulado_limpieza / total_entregas) if total_entregas else 0.0
+            prom_tiempo = (acumulado_tiempo / total_entregas) if total_entregas else 0.0
+            tasa_podridos = (acumulado_podridos / acumulado_ingredientes * 100.0) if acumulado_ingredientes else 0.0
+
+            return [
+                f"Platos entregados: {total_entregas}",
+                f"Chef: {entregas_chef} | Interceptor: {entregas_interceptor}",
+                f"Propinas ganadas: {propinas_totales_monedas} monedas",
+                f"Comida promedio: {prom_comida:.2f}/5",
+                f"Limpieza promedio: {limpieza_a_palabra(prom_limpieza)}",
+                f"Tiempo promedio por pedido: {prom_tiempo:.1f}s",
+                f"Ingredientes podridos usados: {acumulado_podridos}/{acumulado_ingredientes} ({tasa_podridos:.1f}%)",
+                f"Estado final de cocina: {limpieza_a_palabra(calcular_limpieza_por_platos(platos_sucios, len(temporizadores_sucios), capacidad=3))}",
+            ]
+
         lista_pedidos = generar_pedidos(self.ordenes)
         lista_objetivos = expandir_objetivos(lista_pedidos)
         
@@ -215,6 +278,9 @@ class GameScene:
                 if simulacion_activa:
                     print(f"Simulación finalizada por tiempo ({TIEMPO_SIMULACION_MINUTOS} minutos completados). Pantalla congelada.")
                     simulacion_activa = False
+                    mostrar_tiempo_agotado_until = ahora + 3000
+                    resumen_final_lineas = construir_resumen_final()
+                    mostrar_resumen_final = False
                 tiempo_restante_ms = 0
             else:
                 tiempo_restante_ms = duracion_max_ms - transcurrido_global
@@ -223,6 +289,14 @@ class GameScene:
                 for evento in pygame.event.get():
                     if evento.type == pygame.QUIT:
                         return False
+                    if evento.type == pygame.KEYDOWN:
+                        if evento.key == pygame.K_r:
+                            return True
+                        if evento.key == pygame.K_ESCAPE:
+                            return False
+
+                if mostrar_tiempo_agotado_until and ahora >= mostrar_tiempo_agotado_until:
+                    mostrar_resumen_final = True
                 
                 interceptor_lavando = interceptor.lavando
                 interceptor_progreso_lavado = interceptor.progreso_lavado
@@ -263,6 +337,11 @@ class GameScene:
                     self.img_interceptor_dir[interceptor.direccion],
                     ingrediente_podrido,
                     tiempo_restante_ms,
+                    resumen_entrega,
+                    resumen_entrega_until,
+                    bool(mostrar_tiempo_agotado_until and ahora < mostrar_tiempo_agotado_until),
+                    mostrar_resumen_final,
+                    resumen_final_lineas,
                 )
                 
                 self.ventana.blit(self.pantalla_virtual, (0, 0))
@@ -410,8 +489,12 @@ class GameScene:
 
                 # --- Verificación de ingrediente podrido ---
                 if objetivo_actual in INGREDIENTES:
+                    if ingredientes_platillo_chef == 0:
+                        inicio_platillo_chef = ahora
+                    ingredientes_platillo_chef += 1
                     if verificar_ingrediente_podrido(PROB_INGREDIENTE_PODRIDO):
                         print(f"¡Ingrediente PODRIDO en {objetivo_actual}! Continuando pedido con él...")
+                        podridos_platillo_chef += 1
                         ingrediente_podrido = True
                         podrido_flash_until = ahora + 1500  # Mostrar indicador 1.5s
                         # Antes se reinsertaba para recoger de nuevo, ahora el chef se lo queda.
@@ -419,8 +502,37 @@ class GameScene:
                         print(f"Ingrediente fresco recogido en {objetivo_actual}.")
 
                 if objetivo_actual in ENTREGAS:
+                    tiempo_platillo_seg = max(0.0, (ahora - inicio_platillo_chef) / 1000.0) if inicio_platillo_chef else 0.0
+                    puntaje_comida = calcular_puntaje_comida(ingredientes_platillo_chef, podridos_platillo_chef)
+                    puntaje_limpieza = calcular_limpieza_por_platos(platos_sucios, len(temporizadores_sucios), capacidad=3)
+                    evaluacion_propina = evaluar_propina_difusa(tiempo_platillo_seg, puntaje_comida, puntaje_limpieza)
+                    limpieza_txt = limpieza_a_palabra(puntaje_limpieza)
+                    monedas_propina = int(round(evaluacion_propina['propina']))
+
+                    entregas_chef += 1
+                    propinas_totales_monedas += monedas_propina
+                    acumulado_comida += puntaje_comida
+                    acumulado_limpieza += puntaje_limpieza
+                    acumulado_tiempo += tiempo_platillo_seg
+                    acumulado_podridos += podridos_platillo_chef
+                    acumulado_ingredientes += ingredientes_platillo_chef
+
                     registrar_entrega(ahora)
-                    print("Pedido entregado. Plato sucio llegará en 15s.")
+                    print(
+                        "Pedido entregado. "
+                        f"Comida={puntaje_comida:.2f}/5 (podridos {podridos_platillo_chef}/{ingredientes_platillo_chef}), "
+                        f"Tiempo={tiempo_platillo_seg:.1f}s, Limpieza={limpieza_txt}, "
+                        f"Propina={monedas_propina} monedas"
+                    )
+                    resumen_entrega = (
+                        f"Comida={puntaje_comida:.2f}/5 | Podridos {podridos_platillo_chef}/{ingredientes_platillo_chef} | "
+                        f"Tiempo={tiempo_platillo_seg:.1f}s | Limpieza={limpieza_txt} | Propina={monedas_propina} monedas"
+                    )
+                    resumen_entrega_until = ahora + 9000
+
+                    ingredientes_platillo_chef = 0
+                    podridos_platillo_chef = 0
+                    inicio_platillo_chef = 0
 
                 if objetivo_actual in TIEMPOS_ESPERA:
                     esperando_accion = True
@@ -570,11 +682,46 @@ class GameScene:
 
                     # --- Verificación de ingrediente podrido para el interceptor ---
                     if objetivo_interceptor in INGREDIENTES:
+                        if ingredientes_platillo_interceptor == 0:
+                            inicio_platillo_interceptor = ahora
+                        ingredientes_platillo_interceptor += 1
                         if verificar_ingrediente_podrido(PROB_INGREDIENTE_PODRIDO):
                             print(f"¡Ingrediente PODRIDO en {objetivo_interceptor}! Interceptor continúa pedido con él...")
+                            podridos_platillo_interceptor += 1
                             # Antes se usaba interceptor.reinsertar_objetivo(), ahora se lo queda.
                         else:
                             print(f"Interceptor recogió ingrediente fresco en {objetivo_interceptor}.")
+
+                    if objetivo_interceptor in ENTREGAS:
+                        tiempo_platillo_seg_int = max(0.0, (ahora - inicio_platillo_interceptor) / 1000.0) if inicio_platillo_interceptor else 0.0
+                        puntaje_comida_int = calcular_puntaje_comida(ingredientes_platillo_interceptor, podridos_platillo_interceptor)
+                        puntaje_limpieza_int = calcular_limpieza_por_platos(platos_sucios, len(temporizadores_sucios), capacidad=3)
+                        evaluacion_propina_int = evaluar_propina_difusa(tiempo_platillo_seg_int, puntaje_comida_int, puntaje_limpieza_int)
+                        limpieza_txt_int = limpieza_a_palabra(puntaje_limpieza_int)
+                        monedas_propina_int = int(round(evaluacion_propina_int['propina']))
+
+                        entregas_interceptor += 1
+                        propinas_totales_monedas += monedas_propina_int
+                        acumulado_comida += puntaje_comida_int
+                        acumulado_limpieza += puntaje_limpieza_int
+                        acumulado_tiempo += tiempo_platillo_seg_int
+                        acumulado_podridos += podridos_platillo_interceptor
+                        acumulado_ingredientes += ingredientes_platillo_interceptor
+
+                        print(
+                            "Entrega interceptor. "
+                            f"Comida={puntaje_comida_int:.2f}/5 (podridos {podridos_platillo_interceptor}/{ingredientes_platillo_interceptor}), "
+                            f"Tiempo={tiempo_platillo_seg_int:.1f}s, Limpieza={limpieza_txt_int}, "
+                            f"Propina={monedas_propina_int} monedas"
+                        )
+                        resumen_entrega = (
+                            f"Comida={puntaje_comida_int:.2f}/5 | Podridos {podridos_platillo_interceptor}/{ingredientes_platillo_interceptor} | "
+                            f"Tiempo={tiempo_platillo_seg_int:.1f}s | Limpieza={limpieza_txt_int} | Propina={monedas_propina_int} monedas"
+                        )
+                        resumen_entrega_until = ahora + 9000
+                        ingredientes_platillo_interceptor = 0
+                        podridos_platillo_interceptor = 0
+                        inicio_platillo_interceptor = 0
 
             if 'washer_done' in eventos:
                 platos_limpios += 1
@@ -620,6 +767,11 @@ class GameScene:
                 self.img_interceptor_dir[interceptor.direccion],
                 ingrediente_podrido,
                 tiempo_restante_ms,
+                resumen_entrega,
+                resumen_entrega_until,
+                bool(mostrar_tiempo_agotado_until and ahora < mostrar_tiempo_agotado_until),
+                mostrar_resumen_final,
+                resumen_final_lineas,
             )
             
             
