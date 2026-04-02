@@ -1,6 +1,7 @@
 import copy
 import pygame
 import pytmx
+import random
 
 from src.config import (
     TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO, TIEMPOS_ESPERA,
@@ -381,6 +382,32 @@ class GameScene:
                     temporizadores_restantes.append(tiempo_objetivo)
             kitchen.temporizadores_sucios = temporizadores_restantes
 
+            # --- Central Batch Washing Dispatcher ---
+            if kitchen.platos_limpios == 0 and kitchen.platos_sucios > 0:
+                chef_necesita = (objetivo_actual in PLATOS) if 'objetivo_actual' in locals() and objetivo_actual else False
+                interceptor_necesita = (interceptor.current_objetivo() in PLATOS)
+                
+                # Check si alguien ya tiene la tarea asignada o está en ello
+                def tiene_lavado(lista, idx): return objetivo_platos_sucios in lista[idx:idx+2]
+                chef_ya_lavando = tiene_lavado(lista_objetivos, index_objetivo) or getattr(chef, 'platos_cargados', 0) > 0 or chef.lavando_plato
+                # interceptor checks
+                int_ya_lavando = tiene_lavado(interceptor.lista_objetivos, interceptor.index_objetivo) or getattr(interceptor, 'platos_cargados', 0) > 0 or interceptor.lavando
+                
+                if (chef_necesita or interceptor_necesita) and not (chef_ya_lavando or int_ya_lavando):
+                    asignar_a_chef = random.choice([True, False])
+                    print(f"[{ahora}ms] Dispatcher: Cero platos limpios. Asignando lavado en lote al {'CHEF PRINCIPAL' if asignar_a_chef else 'INTERCEPTOR'}.")
+                    if asignar_a_chef:
+                        lista_objetivos[index_objetivo:index_objetivo] = [objetivo_platos_sucios, objetivo_lavado]
+                        chef.clear_route()
+                        # objetivo_actual se re-asigna abajo pero para asegurar:
+                        if 'objetivo_actual' in locals():
+                            objetivo_actual = lista_objetivos[index_objetivo]
+                    else:
+                        interceptor.lista_objetivos[interceptor.index_objetivo:interceptor.index_objetivo] = [objetivo_platos_sucios, objetivo_lavado]
+                        interceptor.ruta = []
+                        interceptor.ruta_objetivo = None
+            # ----------------------------------------
+
             eventos_chef, index_objetivo, objetivo_actual, str_entrega, duration_entrega = chef.update(
                 ahora=ahora,
                 mapa_actual=mapa_actual,
@@ -446,52 +473,55 @@ class GameScene:
                 else:
                     if objetivo_interceptor == objetivo_platos_sucios:
                         if kitchen.platos_sucios > 0:
-                            kitchen.platos_sucios -= 1
-                            print(f"Interceptor recogió plato sucio en {objetivo_interceptor}. Sucios restantes: {kitchen.platos_sucios}")
+                            interceptor.platos_cargados = kitchen.platos_sucios
+                            kitchen.platos_sucios = 0
+                            print(f"Interceptor recogió {interceptor.platos_cargados} platos para lavar.")
+                            interceptor.advance_objetivo()
+                        else:
                             interceptor.advance_objetivo()
                     elif objetivo_interceptor == objetivo_lavado:
-                        interceptor.start_washing(ahora)
-                        print("Interceptor lavando plato...")
+                        if getattr(interceptor, 'platos_cargados', 0) > 0:
+                            interceptor.start_washing(ahora, tiempo_lavado_ms)
+                            print(f"Interceptor lavando...")
+                        else:
+                            interceptor.advance_objetivo()
                     elif objetivo_interceptor in PLATOS:
                         if kitchen.platos_limpios > 0:
                             kitchen.platos_limpios -= 1
                             print(f"Interceptor tomó plato limpio en {objetivo_interceptor}. Platos limpios restantes: {kitchen.platos_limpios}")
                             interceptor.advance_objetivo()
-                    elif objetivo_interceptor in ENTREGAS:
-                        registrar_entrega(ahora)
-                        print("Interceptor entregó un pedido. Platos sucios llegarán pronto.")
-                        interceptor.advance_objetivo()
-
-                    # --- Verificación de ingrediente podrido para el interceptor ---
-                    if objetivo_interceptor in INGREDIENTES:
-                        if ingredientes_platillo_interceptor == 0:
-                            inicio_platillo_interceptor = ahora
-                        ingredientes_platillo_interceptor += 1
-                        if verificar_ingrediente_podrido(PROB_INGREDIENTE_PODRIDO):
-                            print(f"¡Ingrediente PODRIDO en {objetivo_interceptor}! Interceptor continúa pedido con él...")
-                            podridos_platillo_interceptor += 1
-                            # Antes se usaba interceptor.reinsertar_objetivo(), ahora se lo queda.
-                        else:
-                            print(f"Interceptor recogió ingrediente fresco en {objetivo_interceptor}.")
-
-                    if objetivo_interceptor in ENTREGAS:
-                        tiempo_platillo_seg_int = max(0.0, (ahora - inicio_platillo_interceptor) / 1000.0) if inicio_platillo_interceptor else 0.0
-                        
-                        monedas_propina_int, resumen_entrega, puntaje_comida_int, limpieza_txt_int = kitchen.entregar_pedido(
-                            tiempo_platillo_seg_int, ingredientes_platillo_interceptor, podridos_platillo_interceptor
-                        )
-                        
-                        entregas_interceptor += 1
-                        kitchen.registrar_entrega(ahora, 10000)
-                        
-                        resumen_entrega_until = ahora + 9000
-                        ingredientes_platillo_interceptor = 0
-                        podridos_platillo_interceptor = 0
-                        inicio_platillo_interceptor = 0
+                    pass
 
             if 'washer_done' in eventos:
-                kitchen.platos_limpios += 1
-                print(f"Interceptor completó lavado. Platos limpios disponibles: {kitchen.platos_limpios}")
+                cantidad_lavada = eventos['washer_done'] if type(eventos['washer_done']) == int else 1
+                kitchen.platos_limpios += cantidad_lavada
+                print(f"Interceptor completó lavado de {cantidad_lavada}. Platos limpios disponibles: {kitchen.platos_limpios}")
+
+            if 'wait_done' in eventos:
+                objetivo_interceptor = eventos['wait_done']
+                if objetivo_interceptor in INGREDIENTES:
+                    if ingredientes_platillo_interceptor == 0:
+                        inicio_platillo_interceptor = ahora
+                    ingredientes_platillo_interceptor += 1
+                    if verificar_ingrediente_podrido(PROB_INGREDIENTE_PODRIDO):
+                        print(f"¡Ingrediente PODRIDO en {objetivo_interceptor}! Interceptor continúa pedido...")
+                        podridos_platillo_interceptor += 1
+                    else:
+                        print(f"Interceptor recogió ingrediente fresco en {objetivo_interceptor}.")
+
+                elif objetivo_interceptor in ENTREGAS:
+                    tiempo_platillo_seg_int = max(0.0, (ahora - inicio_platillo_interceptor) / 1000.0) if inicio_platillo_interceptor else 0.0
+                    monedas_propina_int, resumen_entrega, puntaje_comida_int, limpieza_txt_int = kitchen.entregar_pedido(
+                        tiempo_platillo_seg_int, ingredientes_platillo_interceptor, podridos_platillo_interceptor
+                    )
+                    
+                    entregas_interceptor += 1
+                    kitchen.registrar_entrega(ahora, 10000)
+                    print(f"¡Interceptor entregó un pedido! Total entregas interceptor: {entregas_interceptor}")
+                    
+                    ingredientes_platillo_interceptor = 0
+                    podridos_platillo_interceptor = 0
+                    inicio_platillo_interceptor = 0
 
             for evento in pygame.event.get():
                 if evento.type == pygame.QUIT:

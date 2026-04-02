@@ -38,6 +38,12 @@ class Interceptor:
         self._freeze_active_until = 0
         # evita que el interceptor se cruce con la ruta del chef durante un periodo tras congelar
         self._avoid_until = 0
+        
+        self.was_adjacent = False
+        
+        # Atributos para lavado de platos en lote
+        self.platos_cargados = 0
+        self.lavando_cantidad = 0
 
     def current_objetivo(self):
         if self.index_objetivo < len(self.lista_objetivos):
@@ -55,10 +61,13 @@ class Interceptor:
         self.ruta = []
         self.ruta_objetivo = None
 
-    def start_washing(self, ahora: int):
+    def start_washing(self, ahora: int, tiempo_base_ms: int):
         self.lavando = True
         self.inicio_lavado = ahora
         self.progreso_lavado = 0.0
+        self.lavando_cantidad = max(1, self.platos_cargados)
+        self.tiempo_lavado_total = tiempo_base_ms * self.lavando_cantidad
+        self.platos_cargados = 0
 
     def start_wait(self, dur_ms: int, ahora: int):
         self.esperando = True
@@ -84,12 +93,14 @@ class Interceptor:
 
         # si está lavando, actualizar progreso y terminar si corresponde
         if self.lavando:
+            tiempo_total = getattr(self, 'tiempo_lavado_total', tiempo_lavado_ms)
             trans = ahora - self.inicio_lavado
-            self.progreso_lavado = min(1.0, trans / tiempo_lavado_ms)
-            if trans >= tiempo_lavado_ms:
+            self.progreso_lavado = min(1.0, trans / tiempo_total)
+            if trans >= tiempo_total:
                 self.lavando = False
                 self.progreso_lavado = 0.0
-                eventos['washer_done'] = True
+                eventos['washer_done'] = self.lavando_cantidad
+                self.lavando_cantidad = 0
                 self.advance_objetivo()
             return eventos
 
@@ -104,7 +115,7 @@ class Interceptor:
             if trans >= self.tiempo_espera_actual:
                 self.esperando = False
                 self.progreso_espera = 0.0
-                eventos['wait_done'] = True
+                eventos['wait_done'] = self.current_objetivo()
                 self.advance_objetivo()
             return eventos
 
@@ -144,13 +155,24 @@ class Interceptor:
 
             self.pathfinder.set_matrix(matriz_temp)
             self.ruta = self.pathfinder.obtener_ruta(self.pos, objetivo)
-            self.ruta_objetivo = objetivo
 
             if not self.ruta and tuple(self.pos) != objetivo:
-                # fallback
+                # intento 2 fallback suave: bloquear SOLO la celda donde está parado el chef físicamente
+                matriz_soft = copy.deepcopy(self.mapa)
+                if tuple(chef_pos) != objetivo:
+                    try:
+                        matriz_soft[chef_pos[1]][chef_pos[0]] = 0
+                    except IndexError:
+                        pass
+                self.pathfinder.set_matrix(matriz_soft)
+                self.ruta = self.pathfinder.obtener_ruta(self.pos, objetivo)
+
+            if not self.ruta and tuple(self.pos) != objetivo:
+                # fallback absoluto
                 self.pathfinder.set_matrix(self.mapa)
                 self.ruta = self.pathfinder.obtener_ruta(self.pos, objetivo)
-                self.ruta_objetivo = objetivo
+                
+            self.ruta_objetivo = objetivo
 
         # movimiento
         if self.ruta:
@@ -178,16 +200,20 @@ class Interceptor:
 
                     self.pos[0], self.pos[1] = siguiente[0], siguiente[1]
                 self.contador_frames = 0
-                if not self.ruta:
+                if not self.ruta and tuple(self.pos) == self.ruta_objetivo:
                     eventos['arrived'] = self.ruta_objetivo
 
         # detectar adyacencia para congelar al chef (1 casilla de distancia)
         distancia = abs(self.pos[0] - chef_pos[0]) + abs(self.pos[1] - chef_pos[1])
-        if distancia == 1 and ahora > self._freeze_active_until:
-            # congelamiento de 3s
-            self._freeze_active_until = ahora + 3000
-            # evitar cruce con la ruta del chef durante los próximos 3s para dar tiempo al chef
-            self._avoid_until = self._freeze_active_until
-            eventos['freeze_until'] = self._freeze_active_until
+        if distancia == 1:
+            if not getattr(self, 'was_adjacent', False) and ahora > self._freeze_active_until:
+                # congelamiento de 3s
+                self._freeze_active_until = ahora + 3000
+                # evitar cruce con la ruta del chef durante los próximos 3s para dar tiempo al chef
+                self._avoid_until = self._freeze_active_until
+                eventos['freeze_until'] = self._freeze_active_until
+            self.was_adjacent = True
+        else:
+            self.was_adjacent = False
 
         return eventos

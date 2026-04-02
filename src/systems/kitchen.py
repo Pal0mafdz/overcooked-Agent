@@ -64,6 +64,6 @@ class KitchenState:
         monedas = res_difusa["propina"]
 
         self.propinas_totales_monedas += monedas
-        msg = f"+${monedas:.2f} MXN (Limpieza: {limpieza_actual:.1f}/10, Tiempo: {tiempo_platillo_seg:.1f}s)"
-
+        higiene_visual = 100.0 - limpieza_actual
+        msg = f"+${monedas:.2f} MXN | COMIDA: {puntaje_comida:.1f}/5.0 | HIGIENE: {higiene_visual:.0f}% | TIEMPO: {tiempo_platillo_seg:.1f}s"
         return monedas, msg, puntaje_comida, str(round(limpieza_actual, 1))

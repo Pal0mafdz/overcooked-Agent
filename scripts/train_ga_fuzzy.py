@@ -28,14 +28,14 @@ DATASET_IDEAL = [
     (180.0, 2.0, 60.0, 5.0),
     
     # Casos normales (Servicio normal, comida normal, limpio/sucio)
+    (120.0, 3.0, 10.0, 11.0),
     (100.0, 3.0, 50.0, 10.0),
     (90.0, 3.5, 40.0, 12.0),
-    (120.0, 3.0, 10.0, 11.0),
     
     # Casos perfectos (Rápido, comida sabrosa, impecable)
-    (40.0, 4.8, 5.0, 18.0),
     (60.0, 4.5, 15.0, 16.0),
-    (30.0, 5.0, 0.0, 20.0),
+    (40.0, 4.8, 5.0, 18.0),
+    (30.0, 5.0, 0.0, 20.0)
 ]
 
 # Funciones de utilidad para convertir DICCs a Listas (Cromosomas) y viceversa

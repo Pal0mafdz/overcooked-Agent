@@ -26,6 +26,10 @@ class Chef:
         self.inicio_lavado = 0
         self.progreso_lavado = 0.0
 
+        # Atributos para lavado en lote
+        self.platos_cargados = 0
+        self.lavando_cantidad = 0
+
         # Ingredientes en mano
         self.ingredientes_platillo = 0
         self.podridos_platillo = 0
@@ -73,14 +77,14 @@ class Chef:
                 self.clear_route()
 
         if self.lavando_plato:
+            tiempo_total = tiempo_lavado_ms * max(1, self.lavando_cantidad)
             transcurrido = ahora - self.inicio_lavado
-            self.progreso_lavado = min(1.0, transcurrido / tiempo_lavado_ms)
-            if transcurrido >= tiempo_lavado_ms:
+            self.progreso_lavado = min(1.0, transcurrido / tiempo_total)
+            if transcurrido >= tiempo_total:
                 self.lavando_plato = False
                 self.progreso_lavado = 0.0
-                self.tiene_plato_sucio = False
-                kitchen.platos_limpios += 1
-                self.en_reposicion_plato = False
+                kitchen.platos_limpios += self.lavando_cantidad
+                self.lavando_cantidad = 0
                 self.esperando_plato_sucio = False
                 index_objetivo += 1
                 self.clear_route()
@@ -120,18 +124,21 @@ class Chef:
             and not self.lavando_plato
             and not self.esperando_accion
         ):
-            if self.en_reposicion_plato and self.buscando_plato_sucio and objetivo_actual == objetivo_platos_sucios:
+            if objetivo_actual == objetivo_platos_sucios:
                 if kitchen.platos_sucios > 0:
-                    kitchen.platos_sucios -= 1
-                    self.tiene_plato_sucio = True
-                    self.buscando_plato_sucio = False
+                    self.platos_cargados = kitchen.platos_sucios
+                    kitchen.platos_sucios = 0
+                    print(f"Chef Principal recogió {self.platos_cargados} platos para lavar.")
 
-            elif self.en_reposicion_plato and self.tiene_plato_sucio and objetivo_actual == objetivo_lavado:
-                self.lavando_plato = True
-                self.inicio_lavado = ahora
-                self.progreso_lavado = 0.0
-                self.clear_route()
-                break
+            elif objetivo_actual == objetivo_lavado:
+                if self.platos_cargados > 0:
+                    self.lavando_plato = True
+                    self.inicio_lavado = ahora
+                    self.progreso_lavado = 0.0
+                    self.lavando_cantidad = self.platos_cargados
+                    self.platos_cargados = 0
+                    self.clear_route()
+                    break
 
             if objetivo_actual in platos_coords and kitchen.platos_limpios > 0:
                 kitchen.platos_limpios -= 1
