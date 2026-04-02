@@ -1,3 +1,5 @@
+import json
+import os
 import random
 from typing import Dict
 
@@ -81,7 +83,7 @@ def _membership(x: float, shape: tuple[float, ...]) -> float:
     return _trapezoidal(x, shape[0], shape[1], shape[2], shape[3])
 
 
-TIEMPO_FUZZY = {
+DEFAULT_TIEMPO_FUZZY = {
     "muy_tardado": (130.0, 180.0, 300.0, 300.0),
     "tardado": (90.0, 120.0, 150.0),
     "regular": (55.0, 75.0, 100.0),
@@ -89,7 +91,7 @@ TIEMPO_FUZZY = {
     "muy_rapido": (0.0, 0.0, 30.0, 45.0),
 }
 
-COMIDA_FUZZY = {
+DEFAULT_COMIDA_FUZZY = {
     "muy_mala": (0.0, 0.0, 1.0, 2.0),
     "mala": (1.0, 2.0, 3.0),
     "normal": (2.0, 3.0, 4.0),
@@ -97,20 +99,40 @@ COMIDA_FUZZY = {
     "sabrosa": (4.0, 4.5, 5.0, 5.0),
 }
 
-LIMPIEZA_FUZZY = {
+DEFAULT_LIMPIEZA_FUZZY = {
     "asquerosa": (80.0, 90.0, 100.0, 100.0),
     "descuidada": (50.0, 70.0, 85.0),
     "aceptable": (15.0, 40.0, 60.0),
     "impecable": (0.0, 0.0, 10.0, 20.0),
 }
 
-PROPINA_FUZZY = {
+DEFAULT_PROPINA_FUZZY = {
     "nada": (0.0, 0.0, 1.0, 2.5),
     "poca": (1.0, 5.0, 7.0),
     "normal": (6.0, 10.0, 12.5),
     "suficiente": (11.0, 15.0, 18.0),
     "mucha": (17.0, 19.0, 20.0, 20.0),
 }
+
+# Asignaciones Activas
+TIEMPO_FUZZY = DEFAULT_TIEMPO_FUZZY.copy()
+COMIDA_FUZZY = DEFAULT_COMIDA_FUZZY.copy()
+LIMPIEZA_FUZZY = DEFAULT_LIMPIEZA_FUZZY.copy()
+PROPINA_FUZZY = DEFAULT_PROPINA_FUZZY.copy()
+
+# Auto-cargar pesos entrenados (JSON) si existen
+_weights_path = os.path.join(os.path.dirname(__file__), "fuzzy_weights.json")
+if os.path.exists(_weights_path):
+    try:
+        with open(_weights_path, 'r') as _f:
+            _data = json.load(_f)
+            if "TIEMPO_FUZZY" in _data: TIEMPO_FUZZY = {k: tuple(v) for k, v in _data["TIEMPO_FUZZY"].items()}
+            if "COMIDA_FUZZY" in _data: COMIDA_FUZZY = {k: tuple(v) for k, v in _data["COMIDA_FUZZY"].items()}
+            if "LIMPIEZA_FUZZY" in _data: LIMPIEZA_FUZZY = {k: tuple(v) for k, v in _data["LIMPIEZA_FUZZY"].items()}
+            if "PROPINA_FUZZY" in _data: PROPINA_FUZZY = {k: tuple(v) for k, v in _data["PROPINA_FUZZY"].items()}
+        print(f"[Orders] Cargados pesos difusos optimizados desde {_weights_path}")
+    except Exception as _e:
+        print(f"[Orders] Error cargando los pesos entrenados: {_e}")
 
 REGLAS_PROPINA = [
     ({"limpieza": "asquerosa"}, "nada"),
@@ -158,17 +180,30 @@ def calcular_limpieza_por_platos(platos_sucios: int, platos_pendientes: int, cap
     return round(ratio * 100.0, 3)
 
 
-def evaluar_propina_difusa(tiempo_segundos: float, comida: float, limpieza: float) -> Dict[str, float]:
+def evaluar_propina_difusa(
+    tiempo_segundos: float, 
+    comida: float, 
+    limpieza: float,
+    config_tiempo: dict = None,
+    config_comida: dict = None,
+    config_limpieza: dict = None,
+    config_propina: dict = None
+) -> Dict[str, float]:
     """Evalua la propina (0-20) con inferencia difusa tipo Mamdani + centroide."""
+    config_tiempo = config_tiempo if config_tiempo is not None else TIEMPO_FUZZY
+    config_comida = config_comida if config_comida is not None else COMIDA_FUZZY
+    config_limpieza = config_limpieza if config_limpieza is not None else LIMPIEZA_FUZZY
+    config_propina = config_propina if config_propina is not None else PROPINA_FUZZY
+
     tiempo_val = max(0.0, min(300.0, float(tiempo_segundos)))
     comida_val = max(0.0, min(5.0, float(comida)))
     limpieza_val = max(0.0, min(100.0, float(limpieza)))
 
-    grados_tiempo = {k: _membership(tiempo_val, v) for k, v in TIEMPO_FUZZY.items()}
-    grados_comida = {k: _membership(comida_val, v) for k, v in COMIDA_FUZZY.items()}
-    grados_limpieza = {k: _membership(limpieza_val, v) for k, v in LIMPIEZA_FUZZY.items()}
+    grados_tiempo = {k: _membership(tiempo_val, v) for k, v in config_tiempo.items()}
+    grados_comida = {k: _membership(comida_val, v) for k, v in config_comida.items()}
+    grados_limpieza = {k: _membership(limpieza_val, v) for k, v in config_limpieza.items()}
 
-    activaciones_salida = {etiqueta: 0.0 for etiqueta in PROPINA_FUZZY}
+    activaciones_salida = {etiqueta: 0.0 for etiqueta in config_propina}
     for antecedente, consecuente in REGLAS_PROPINA:
         grados = []
         if "tiempo" in antecedente:
@@ -187,7 +222,7 @@ def evaluar_propina_difusa(tiempo_segundos: float, comida: float, limpieza: floa
     denominador = 0.0
     for x in universo:
         pertenencia_agregada = 0.0
-        for etiqueta, shape in PROPINA_FUZZY.items():
+        for etiqueta, shape in config_propina.items():
             pertenencia = _membership(x, shape)
             recorte = min(activaciones_salida[etiqueta], pertenencia)
             if recorte > pertenencia_agregada:

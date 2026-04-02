@@ -1,6 +1,6 @@
 import pygame
 
-from config import (
+from src.config import (
     COLOR_SUELO,
     COLOR_MURO,
     COLOR_REJILLA,
@@ -18,26 +18,18 @@ def render_frame(
     ancho_grid: int,
     alto_grid: int,
     mapa_actual: list[list[int]],
-    chef_pos: list[int],
-    ruta_disponible: list[tuple[int, int]],
+    chef_obj,
+    kitchen_obj,
     zonas_olor: list[tuple[int, int]],
     pozo_descubierto: bool,
     pozos_pos: list[tuple[int, int]],
     pisos_lentos: list[tuple[int, int]],
-
-    platos_limpios: int,
-    platos_sucios: int,
-    lavando_plato: bool,
-    progreso_lavado: float,
     interceptor_pos: list[int] | None = None,
     ruta_interceptor: list[tuple[int, int]] | None = None,
     interceptor_lavando: bool = False,
     interceptor_progreso_lavado: float = 0.0,
     interceptor_esperando: bool = False,
     interceptor_progreso_espera: float = 0.0,
-    esperando_accion: bool = False, 
-    progreso_espera: float = 0.0,
-    chef_freeze_until: int = 0,
     ahora: int = 0,
     interception_happened: bool = False,
     map_surface: pygame.Surface | None = None,
@@ -78,10 +70,10 @@ def render_frame(
             )
 
 
-    texto_limpios = fuente_coord.render(f"L:{platos_limpios}", True, (200, 240, 255))
+    texto_limpios = fuente_coord.render(f"L:{kitchen_obj.platos_limpios}", True, (200, 240, 255))
     ventana.blit(texto_limpios, (1 * tam_celda + 4, 2 * tam_celda + 4))
 
-    texto_sucios = fuente_coord.render(f"S:{platos_sucios}", True, (255, 220, 150))
+    texto_sucios = fuente_coord.render(f"S:{kitchen_obj.platos_sucios}", True, (255, 220, 150))
     ventana.blit(texto_sucios, (16 * tam_celda + 4, 6 * tam_celda + 4))
 
     # Genera la celda amarilla del olor
@@ -95,14 +87,14 @@ def render_frame(
             else:
                 pygame.draw.rect(ventana, (0, 0, 0), (px * tam_celda + 10, py * tam_celda + 10, tam_celda - 20, tam_celda - 20))
 
-    for rx, ry in ruta_disponible:
+    for rx, ry in chef_obj.ruta_disponible:
         pygame.draw.rect(ventana, COLOR_RUTA, (rx * tam_celda + 2, ry * tam_celda, 60, 60))
     # ruta del chef (verde por defecto) ya dibujada arriba
 
     if img_chef:
-        ventana.blit(img_chef, (chef_pos[0] * tam_celda, chef_pos[1] * tam_celda))
+        ventana.blit(img_chef, (chef_obj.pos[0] * tam_celda, chef_obj.pos[1] * tam_celda))
     else:
-        centro_chef = (chef_pos[0] * tam_celda + tam_celda // 2, chef_pos[1] * tam_celda + tam_celda // 2)
+        centro_chef = (chef_obj.pos[0] * tam_celda + tam_celda // 2, chef_obj.pos[1] * tam_celda + tam_celda // 2)
         pygame.draw.circle(ventana, COLOR_CHEF, centro_chef, 22)
 
     # Dibujar ruta y agente interceptor si se pasan
@@ -135,38 +127,38 @@ def render_frame(
         pygame.draw.rect(ventana, (100, 150, 255), (barra_acc_x, barra_acc_y, int(barra_acc_w * interceptor_progreso_espera), barra_acc_h))
         pygame.draw.rect(ventana, (220, 220, 220), (barra_acc_x, barra_acc_y, barra_acc_w, barra_acc_h), 1)
 
-    if lavando_plato:
+    if chef_obj.lavando_plato:
         barra_x = 0 * tam_celda + 6
         barra_y = 6 * tam_celda + tam_celda - 14
         barra_w = tam_celda - 12
         barra_h = 8
         pygame.draw.rect(ventana, (40, 40, 40), (barra_x, barra_y, barra_w, barra_h))
-        pygame.draw.rect(ventana, (120, 220, 120), (barra_x, barra_y, int(barra_w * progreso_lavado), barra_h))
+        pygame.draw.rect(ventana, (120, 220, 120), (barra_x, barra_y, int(barra_w * chef_obj.progreso_lavado), barra_h))
         pygame.draw.rect(ventana, (220, 220, 220), (barra_x, barra_y, barra_w, barra_h), 1)
 
-    if esperando_accion:
-        barra_acc_x = chef_pos[0] * tam_celda
-        barra_acc_y = chef_pos[1] * tam_celda - 12 
+    if chef_obj.esperando_accion:
+        barra_acc_x = chef_obj.pos[0] * tam_celda
+        barra_acc_y = chef_obj.pos[1] * tam_celda - 12 
         barra_acc_w = tam_celda
         barra_acc_h = 8
         pygame.draw.rect(ventana, (40, 40, 40), (barra_acc_x, barra_acc_y, barra_acc_w, barra_acc_h))
-        pygame.draw.rect(ventana, (255, 165, 0), (barra_acc_x, barra_acc_y, int(barra_acc_w * progreso_espera), barra_acc_h))
+        pygame.draw.rect(ventana, (255, 165, 0), (barra_acc_x, barra_acc_y, int(barra_acc_w * chef_obj.progreso_espera), barra_acc_h))
         pygame.draw.rect(ventana, (220, 220, 220), (barra_acc_x, barra_acc_y, barra_acc_w, barra_acc_h), 1)
 
     # Mostrar indicador de congelamiento del chef
-    if chef_freeze_until and ahora:
-        restante = max(0, chef_freeze_until - ahora)
+    if chef_obj.freeze_until and ahora:
+        restante = max(0, chef_obj.freeze_until - ahora)
         total = 3000
         if restante > 0:
             # overlay tint on chef tile
-            chef_tile = (chef_pos[0] * tam_celda, chef_pos[1] * tam_celda, tam_celda, tam_celda)
+            chef_tile = (chef_obj.pos[0] * tam_celda, chef_obj.pos[1] * tam_celda, tam_celda, tam_celda)
             s = pygame.Surface((tam_celda, tam_celda), pygame.SRCALPHA)
             s.fill((60, 140, 200, 120))
             ventana.blit(s, (chef_tile[0], chef_tile[1]))
 
             # freeze progress bar above chef
-            barra_x = chef_pos[0] * tam_celda
-            barra_y = chef_pos[1] * tam_celda - 22
+            barra_x = chef_obj.pos[0] * tam_celda
+            barra_y = chef_obj.pos[1] * tam_celda - 22
             barra_w = tam_celda
             barra_h = 8
             pygame.draw.rect(ventana, (30, 30, 30), (barra_x, barra_y, barra_w, barra_h))
@@ -176,8 +168,8 @@ def render_frame(
 
     # flash indicator when interception happened this frame
     if interception_happened:
-        fx = chef_pos[0] * tam_celda + tam_celda // 2
-        fy = chef_pos[1] * tam_celda + tam_celda // 2
+        fx = chef_obj.pos[0] * tam_celda + tam_celda // 2
+        fy = chef_obj.pos[1] * tam_celda + tam_celda // 2
         pygame.draw.circle(ventana, (255, 240, 50), (fx, fy), 28, 4)
 
     # --- Indicador de ingrediente podrido ---
@@ -185,11 +177,11 @@ def render_frame(
         # Overlay marrón semitransparente sobre la celda del chef
         s = pygame.Surface((tam_celda, tam_celda), pygame.SRCALPHA)
         s.fill((*COLOR_INGREDIENTE_PODRIDO, 160))
-        ventana.blit(s, (chef_pos[0] * tam_celda, chef_pos[1] * tam_celda))
+        ventana.blit(s, (chef_obj.pos[0] * tam_celda, chef_obj.pos[1] * tam_celda))
         # Texto flotante "!Podrido!" encima del chef
         fuente_podrido = pygame.font.SysFont(None, 22)
         texto_podrido = fuente_podrido.render("¡Podrido!", True, (255, 230, 80))
-        ventana.blit(texto_podrido, (chef_pos[0] * tam_celda + 2, chef_pos[1] * tam_celda - 20))
+        ventana.blit(texto_podrido, (chef_obj.pos[0] * tam_celda + 2, chef_obj.pos[1] * tam_celda - 20))
 
     # --- Temporizador Global ---
     if tiempo_restante_ms > 0:
@@ -259,28 +251,40 @@ def render_frame(
         overlay.fill((0, 0, 0, 165))
         ventana.blit(overlay, (0, 0))
 
-        panel_w = int(ancho_grid * tam_celda * 0.78)
-        panel_h = int(alto_grid * tam_celda * 0.74)
+        panel_w = int(ancho_grid * tam_celda * 0.96)
+        panel_h = int(alto_grid * tam_celda * 0.94)
         panel_x = (ancho_grid * tam_celda - panel_w) // 2
         panel_y = (alto_grid * tam_celda - panel_h) // 2
 
         panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-        panel.fill((17, 22, 28, 235))
+        panel.fill((17, 22, 28, 245))
         ventana.blit(panel, (panel_x, panel_y))
         pygame.draw.rect(ventana, (255, 210, 90), (panel_x, panel_y, panel_w, panel_h), 3)
 
-        fuente_titulo = pygame.font.SysFont(None, 52)
-        fuente_linea = pygame.font.SysFont(None, 32)
-        fuente_hint = pygame.font.SysFont(None, 26)
+        fuente_titulo = pygame.font.SysFont(None, 46)
+        fuente_linea = pygame.font.SysFont(None, 28)
+        fuente_config = pygame.font.SysFont(None, 18)
+        fuente_hint = pygame.font.SysFont(None, 24)
 
         titulo = fuente_titulo.render("Resumen Final", True, (255, 225, 120))
-        ventana.blit(titulo, (panel_x + (panel_w - titulo.get_width()) // 2, panel_y + 18))
+        ventana.blit(titulo, (panel_x + (panel_w - titulo.get_width()) // 2, panel_y + 14))
 
-        y = panel_y + 92
-        for linea in resumen_final_lineas[:10]:
-            surf = fuente_linea.render(linea, True, (235, 240, 245))
-            ventana.blit(surf, (panel_x + 28, y))
-            y += 36
+        y = panel_y + 60
+        for linea in resumen_final_lineas:
+            if linea.startswith("---"):
+                y += 5
+                surf = fuente_hint.render(linea, True, (255, 210, 120))
+                ventana.blit(surf, (panel_x + 20, y))
+                y += 24
+            elif linea.startswith("[D]") or linea.startswith("[E]"):
+                color = (200, 200, 200) if "[D]" in linea else (150, 255, 150)
+                surf = fuente_config.render(linea, True, color)
+                ventana.blit(surf, (panel_x + 20, y))
+                y += 18
+            else:
+                surf = fuente_linea.render(linea, True, (235, 240, 245))
+                ventana.blit(surf, (panel_x + 20, y))
+                y += 28
 
         hint = fuente_hint.render("ESC para salir | R para reiniciar", True, (200, 205, 210))
         ventana.blit(hint, (panel_x + panel_w - hint.get_width() - 20, panel_y + panel_h - 36))

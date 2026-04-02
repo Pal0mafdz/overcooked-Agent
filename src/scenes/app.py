@@ -1,6 +1,6 @@
 import pygame
 import sys
-from config import ANCHO_GRID, ALTO_GRID, TAM_CELDA
+from src.config import ANCHO_GRID, ALTO_GRID, TAM_CELDA
 from src.scenes.game_scene import GameScene
 
 def run_app(ordenes: int):

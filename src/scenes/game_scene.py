@@ -2,7 +2,7 @@ import copy
 import pygame
 import pytmx
 
-from config import (
+from src.config import (
     TAM_CELDA, ANCHO_GRID, ALTO_GRID, VELOCIDAD_MOVIMIENTO, TIEMPOS_ESPERA,
     COLOR_SUELO, COLOR_MURO, COLOR_REJILLA, PROB_INGREDIENTE_PODRIDO,
     TIEMPO_SIMULACION_MINUTOS, INTERVALO_NUEVO_PEDIDO_SEG
@@ -21,6 +21,14 @@ from src.systems.orders import (
     calcular_puntaje_comida,
     calcular_limpieza_por_platos,
     evaluar_propina_difusa,
+    DEFAULT_TIEMPO_FUZZY,
+    TIEMPO_FUZZY,
+    DEFAULT_COMIDA_FUZZY,
+    COMIDA_FUZZY,
+    DEFAULT_LIMPIEZA_FUZZY,
+    LIMPIEZA_FUZZY,
+    DEFAULT_PROPINA_FUZZY,
+    PROPINA_FUZZY,
 )
 from src.systems.pathfinding import Pathfinder
 from src.ui.render import render_frame
@@ -110,37 +118,18 @@ class GameScene:
         tiempo_lavado_ms = 5000
 
         mapa_actual = copy.deepcopy(MAPA_ORIGINAL)
-        chef_pos = [1, 3]
-        chef_direccion = 0  # Start facing front (down)
-        ruta_disponible: list[tuple[int, int]] = []
-        contador_frames = 0
+        
+        from src.entities.chef import Chef
+        from src.systems.kitchen import KitchenState
+        
+        chef = Chef([1, 3])
+        kitchen = KitchenState(platos_iniciales=3, max_sucios=3)
+
         index_objetivo = 0
-        ruta_objetivo = None
         ahora = pygame.time.get_ticks()
-
-        platos_limpios = 3
-        platos_sucios = 0
-        temporizadores_sucios: list[int] = []
-
-        en_reposicion_plato = False
-        buscando_plato_sucio = False
-        tiene_plato_sucio = False
-        lavando_plato = False
-        inicio_lavado = 0
-        progreso_lavado = 0.0
-        esperando_plato_sucio = False
-
-        esperando_accion = False
-        inicio_espera = 0
-        tiempo_espera_actual = 0
-        progreso_espera = 0.0
 
         ingrediente_podrido = False   # True durante el frame en que se detecta un ingrediente podrido
         podrido_flash_until = 0       # Timestamp hasta el cual mostrar el indicador de podrido
-
-        ingredientes_platillo_chef = 0
-        podridos_platillo_chef = 0
-        inicio_platillo_chef = 0
 
         ingredientes_platillo_interceptor = 0
         podridos_platillo_interceptor = 0
@@ -152,14 +141,7 @@ class GameScene:
         resumen_final_lineas: list[str] = []
         mostrar_resumen_final = False
 
-        entregas_chef = 0
         entregas_interceptor = 0
-        propinas_totales_monedas = 0
-        acumulado_comida = 0.0
-        acumulado_limpieza = 0.0
-        acumulado_tiempo = 0.0
-        acumulado_podridos = 0
-        acumulado_ingredientes = 0
 
         def limpieza_a_palabra(limpieza_num: float) -> str:
             if limpieza_num >= 80:
@@ -171,22 +153,37 @@ class GameScene:
             return "Impecable"
 
         def construir_resumen_final() -> list[str]:
-            total_entregas = entregas_chef + entregas_interceptor
-            prom_comida = (acumulado_comida / total_entregas) if total_entregas else 0.0
-            prom_limpieza = (acumulado_limpieza / total_entregas) if total_entregas else 0.0
-            prom_tiempo = (acumulado_tiempo / total_entregas) if total_entregas else 0.0
-            tasa_podridos = (acumulado_podridos / acumulado_ingredientes * 100.0) if acumulado_ingredientes else 0.0
+            total_entregas = chef.entregas + entregas_interceptor
+            prom_comida = (kitchen.acumulado_comida / total_entregas) if total_entregas else 0.0
+            prom_limpieza = (kitchen.acumulado_limpieza / total_entregas) if total_entregas else 0.0
+            prom_tiempo = (kitchen.acumulado_tiempo / total_entregas) if total_entregas else 0.0
+            tasa_podridos = (kitchen.acumulado_podridos / kitchen.acumulado_ingredientes * 100.0) if kitchen.acumulado_ingredientes else 0.0
 
-            return [
+            base_lines = [
                 f"Platos entregados: {total_entregas}",
-                f"Chef: {entregas_chef} | Interceptor: {entregas_interceptor}",
-                f"Propinas ganadas: {propinas_totales_monedas} monedas",
+                f"Chef: {chef.entregas} | Interceptor: {entregas_interceptor}",
+                f"Propinas ganadas: ${kitchen.propinas_totales_monedas:.2f} MXN",
                 f"Comida promedio: {prom_comida:.2f}/5",
                 f"Limpieza promedio: {limpieza_a_palabra(prom_limpieza)}",
                 f"Tiempo promedio por pedido: {prom_tiempo:.1f}s",
-                f"Ingredientes podridos usados: {acumulado_podridos}/{acumulado_ingredientes} ({tasa_podridos:.1f}%)",
-                f"Estado final de cocina: {limpieza_a_palabra(calcular_limpieza_por_platos(platos_sucios, len(temporizadores_sucios), capacidad=3))}",
+                f"Ingredientes podridos usados: {kitchen.acumulado_podridos}/{kitchen.acumulado_ingredientes} ({tasa_podridos:.1f}%)",
+                f"Estado final de cocina: {limpieza_a_palabra(calcular_limpieza_por_platos(kitchen.platos_sucios, len(kitchen.temporizadores_sucios), capacidad=3))}",
             ]
+
+            def fmt(d):
+                return " | ".join([f"{k}: {tuple(round(v, 1) for v in vals)}" for k, vals in d.items()])
+                
+            base_lines.append("--- PESOS DE LÓGICA DIFUSA ---")
+            base_lines.append(f"[D] Tiempo: {fmt(DEFAULT_TIEMPO_FUZZY)}")
+            base_lines.append(f"[E] Tiempo: {fmt(TIEMPO_FUZZY)}")
+            base_lines.append(f"[D] Comida: {fmt(DEFAULT_COMIDA_FUZZY)}")
+            base_lines.append(f"[E] Comida: {fmt(COMIDA_FUZZY)}")
+            base_lines.append(f"[D] Limpieza: {fmt(DEFAULT_LIMPIEZA_FUZZY)}")
+            base_lines.append(f"[E] Limpieza: {fmt(LIMPIEZA_FUZZY)}")
+            base_lines.append(f"[D] Propina: {fmt(DEFAULT_PROPINA_FUZZY)}")
+            base_lines.append(f"[E] Propina: {fmt(PROPINA_FUZZY)}")
+
+            return base_lines
 
         lista_pedidos = generar_pedidos(self.ordenes)
         lista_objetivos = expandir_objetivos(lista_pedidos)
@@ -194,12 +191,14 @@ class GameScene:
         # Generar objetivos independientes para el interceptor
         lista_objetivos_interceptor = generar_objetivos_interceptor(self.ordenes)
 
+        celdas_interactivas = set(PLATOS) | set(INGREDIENTES) | set(ENTREGAS) | set(OLLAS) | set(TABLAS) | {objetivo_platos_sucios, objetivo_lavado}
+
         pozos_pos, zonas_olor = generar_pozos_y_olores(
             mapa_actual,
-            chef_pos,
+            chef.pos,
             lista_objetivos,
             cantidad_pozos=3,
-            celdas_prohibidas=PLATOS,
+            celdas_prohibidas=celdas_interactivas,
         )
         for (px, py) in pozos_pos:
             mapa_actual[py][px] = 0
@@ -207,10 +206,10 @@ class GameScene:
 
         pisos_lentos = generar_pisos_lentos(
             mapa_actual,
-            chef_pos,
+            chef.pos,
             lista_objetivos,
             cantidad=3,
-            celdas_prohibidas=PLATOS,
+            celdas_prohibidas=celdas_interactivas,
         )
 
   
@@ -222,7 +221,8 @@ class GameScene:
             for dx, dy in [(0,1),(0,-1),(1,0),(-1,0)]:
                 nx, ny = x + dx, y + dy
                 if 0 <= nx < ANCHO_GRID and 0 <= ny < ALTO_GRID:
-                    zona_lenta.add((nx, ny))
+                    if (nx, ny) not in celdas_interactivas:
+                        zona_lenta.add((nx, ny))
 
 
         print("Zonas de piso lento", zona_lenta)
@@ -243,14 +243,14 @@ class GameScene:
             evitar = set(evitar or [])
             for y in range(len(mapa)):
                 for x in range(len(mapa[0])):
-                    if mapa[y][x] == 1 and (x, y) not in evitar and (x, y) != tuple(chef_pos):
+                    if mapa[y][x] == 1 and (x, y) not in evitar and (x, y) != tuple(chef.pos):
                         return [x, y]
             return [1, 3]
 
         interceptor_start = encontrar_celda_libre(mapa_actual, evitar=set(lista_objetivos))
         # El interceptor usa su propia lista de objetivos para evitar traslape con el chef
         interceptor = Interceptor(interceptor_start, mapa_actual, lista_objetivos_interceptor)
-        chef_freeze_until = 0
+        chef.freeze_until = 0
 
         def es_objetivo_valido(valor) -> bool:
             return (
@@ -260,9 +260,9 @@ class GameScene:
             )
 
         def registrar_entrega(tiempo_actual: int):
-            total_pendiente = platos_sucios + len(temporizadores_sucios)
+            total_pendiente = kitchen.platos_sucios + len(kitchen.temporizadores_sucios)
             if total_pendiente < 3:
-                temporizadores_sucios.append(tiempo_actual + retraso_plato_sucio_ms)
+                kitchen.temporizadores_sucios.append(tiempo_actual + retraso_plato_sucio_ms)
 
         inicio_simulacion = pygame.time.get_ticks()
         duracion_max_ms = TIEMPO_SIMULACION_MINUTOS * 60 * 1000
@@ -277,6 +277,20 @@ class GameScene:
             if transcurrido_global >= duracion_max_ms:
                 if simulacion_activa:
                     print(f"Simulación finalizada por tiempo ({TIEMPO_SIMULACION_MINUTOS} minutos completados). Pantalla congelada.")
+                    print("\n" + "="*50)
+                    print(" COMPARATIVA DE CONFIGURACIONES DIFUSAS (GA)")
+                    print("="*50)
+                    print("--- CONFIGURACIÓN POR DEFECTO ---")
+                    print(f"TIEMPO:   {DEFAULT_TIEMPO_FUZZY}")
+                    print(f"COMIDA:   {DEFAULT_COMIDA_FUZZY}")
+                    print(f"LIMPIEZA: {DEFAULT_LIMPIEZA_FUZZY}")
+                    print(f"PROPINA:  {DEFAULT_PROPINA_FUZZY}")
+                    print("\n--- CONFIGURACIÓN ACTIVA (Entrenada / Cargada) ---")
+                    print(f"TIEMPO:   {TIEMPO_FUZZY}")
+                    print(f"COMIDA:   {COMIDA_FUZZY}")
+                    print(f"LIMPIEZA: {LIMPIEZA_FUZZY}")
+                    print(f"PROPINA:  {PROPINA_FUZZY}")
+                    print("="*50 + "\n")
                     simulacion_activa = False
                     mostrar_tiempo_agotado_until = ahora + 3000
                     resumen_final_lineas = construir_resumen_final()
@@ -309,31 +323,24 @@ class GameScene:
                     ANCHO_GRID,
                     ALTO_GRID,
                     mapa_actual,
-                    chef_pos,
-                    ruta_disponible,
+                    chef,
+                    kitchen,
                     zonas_olor,
                     pozo_descubierto,
                     pozos_pos,
                     pisos_lentos,
-                    platos_limpios,
-                    platos_sucios,
-                    lavando_plato,
-                    progreso_lavado,
                     interceptor.pos,
                     interceptor.ruta,
                     interceptor_lavando,
                     interceptor_progreso_lavado,
                     interceptor_esperando,
                     interceptor_progreso_espera,
-                    esperando_accion, 
-                    progreso_espera,
-                    chef_freeze_until,
                     ahora,
                     False,
                     self.map_surface,
                     self.img_pozo,
                     self.img_piso_mojado,
-                    self.img_chef_dir[chef_direccion],
+                    self.img_chef_dir[chef.direccion],
                     self.img_interceptor_dir[interceptor.direccion],
                     ingrediente_podrido,
                     tiempo_restante_ms,
@@ -365,295 +372,70 @@ class GameScene:
                 ingrediente_podrido = False
 
             temporizadores_restantes: list[int] = []
-            for tiempo_objetivo in temporizadores_sucios:
+            for tiempo_objetivo in kitchen.temporizadores_sucios:
                 if ahora >= tiempo_objetivo:
-                    if platos_sucios < 3:
-                        platos_sucios += 1
-                        print(f"Plato sucio disponible en (17,6). Total sucios: {platos_sucios}")
+                    if kitchen.platos_sucios < 3:
+                        kitchen.platos_sucios += 1
+                        print(f"Plato sucio disponible en (17,6). Total sucios: {kitchen.platos_sucios}")
                 else:
                     temporizadores_restantes.append(tiempo_objetivo)
-            temporizadores_sucios = temporizadores_restantes
+            kitchen.temporizadores_sucios = temporizadores_restantes
 
-            if esperando_accion:
-                transcurrido_espera = ahora - inicio_espera
-                progreso_espera = min(1.0, transcurrido_espera / tiempo_espera_actual)
-                if transcurrido_espera >= tiempo_espera_actual:
-                    esperando_accion = False
-                    progreso_espera = 0.0
-                    index_objetivo += 1  # Avanzamos al siguiente objetivo SOLO cuando termina
-                    ruta_disponible = []
-                    ruta_objetivo = None
-                    contador_frames = 0
-                    print(f"Acción completada en {objetivo_actual}")
+            eventos_chef, index_objetivo, objetivo_actual, str_entrega, duration_entrega = chef.update(
+                ahora=ahora,
+                mapa_actual=mapa_actual,
+                lista_objetivos=lista_objetivos,
+                index_objetivo=index_objetivo,
+                kitchen=kitchen,
+                pathfinder=pathfinder,
+                interceptor_pos=interceptor.pos,
+                tiempo_lavado_ms=tiempo_lavado_ms,
+                tiempos_espera=TIEMPOS_ESPERA,
+                velocidad_movimiento=VELOCIDAD_MOVIMIENTO,
+                zona_lenta=zona_lenta,
+                objetivo_platos_sucios=objetivo_platos_sucios,
+                objetivo_lavado=objetivo_lavado,
+                prob_podrido=PROB_INGREDIENTE_PODRIDO,
+                platos_coords=PLATOS,
+                ingredientes_coords=INGREDIENTES,
+                entregas_coords=ENTREGAS
+            )
 
-            if lavando_plato:
-                transcurrido = ahora - inicio_lavado
-                progreso_lavado = min(1.0, transcurrido / tiempo_lavado_ms)
-                if transcurrido >= tiempo_lavado_ms:
-                    lavando_plato = False
-                    progreso_lavado = 0.0
-                    tiene_plato_sucio = False
-                    platos_limpios += 1
-                    en_reposicion_plato = False
-                    esperando_plato_sucio = False
-                    index_objetivo += 1
-                    ruta_disponible = []
-                    ruta_objetivo = None
-                    contador_frames = 0
-                    print(f"Lavado completado. Platos limpios disponibles: {platos_limpios}")
+            if 'ingrediente_podrido' in eventos_chef:
+                ingrediente_podrido = True
+                podrido_flash_until = ahora + 1500
 
-            
-
-            if index_objetivo < len(lista_objetivos):
-                objetivo_actual = lista_objetivos[index_objetivo]
-            else:
-                objetivo_actual = None
-
-            if objetivo_actual is not None and not es_objetivo_valido(objetivo_actual):
-                print(f"Objetivo invalido ({objetivo_actual}), se omite.")
-                index_objetivo += 1
-                ruta_disponible = []
-                ruta_objetivo = None
-                continue
-
-            for evento in pygame.event.get():
-                if evento.type == pygame.QUIT:
-                    return False
-
-                if evento.type == pygame.KEYDOWN:
-                    if evento.key == pygame.K_r:
-                        return True
-                    if evento.key == pygame.K_ESCAPE:
-                        return False
-
-                if evento.type == pygame.MOUSEBUTTONDOWN:
-                    mx, my = pygame.mouse.get_pos()
-
-                    cx, cy = mx // TAM_CELDA, my // TAM_CELDA
-                    if 0 <= cx < ANCHO_GRID and 0 <= cy < ALTO_GRID:
-                        if mapa_actual[cy][cx] == 1:
-                            if evento.button == 3:
-                                chef_pos = [cx, cy]
-                                ruta_disponible = []
-                                ruta_objetivo = None
-
-            if (
-                objetivo_actual in PLATOS
-                and platos_limpios == 0
-                and not en_reposicion_plato
-                and not lavando_plato
-            ):
-                if platos_sucios > 0:
-                    lista_objetivos[index_objetivo:index_objetivo] = [objetivo_platos_sucios, objetivo_lavado]
-                    en_reposicion_plato = True
-                    buscando_plato_sucio = True
-                    esperando_plato_sucio = False
-                    ruta_disponible = []
-                    ruta_objetivo = None
-                    contador_frames = 0
-                    objetivo_actual = lista_objetivos[index_objetivo]
-                    print("Sin platos limpios. Yendo por plato sucio para lavar.")
-                else:
-                    if not esperando_plato_sucio:
-                        print("Sin platos limpios ni sucios disponibles. Esperando que aparezca uno sucio...")
-                    esperando_plato_sucio = True
-                    ruta_disponible = []
-                    ruta_objetivo = None
-
-            while (
-                objetivo_actual is not None
-                and tuple(chef_pos) == objetivo_actual
-                and not lavando_plato
-                and not esperando_accion
-            ):
-                if en_reposicion_plato and buscando_plato_sucio and objetivo_actual == objetivo_platos_sucios:
-                    if platos_sucios > 0:
-                        platos_sucios -= 1
-                        tiene_plato_sucio = True
-                        buscando_plato_sucio = False
-                        print(f"Plato sucio recogido en (17,6). Sucios restantes: {platos_sucios}")
-
-                elif en_reposicion_plato and tiene_plato_sucio and objetivo_actual == objetivo_lavado:
-                    lavando_plato = True
-                    inicio_lavado = ahora
-                    progreso_lavado = 0.0
-                    ruta_disponible = []
-                    ruta_objetivo = None
-                    contador_frames = 0
-                    print("Lavando plato en (0,6)...")
-                    break
-
-                if objetivo_actual in PLATOS and platos_limpios > 0:
-                    platos_limpios -= 1
-                    print(f"Plato limpio tomado. Platos limpios restantes: {platos_limpios}")
-
-                # --- Verificación de ingrediente podrido ---
-                if objetivo_actual in INGREDIENTES:
-                    if ingredientes_platillo_chef == 0:
-                        inicio_platillo_chef = ahora
-                    ingredientes_platillo_chef += 1
-                    if verificar_ingrediente_podrido(PROB_INGREDIENTE_PODRIDO):
-                        print(f"¡Ingrediente PODRIDO en {objetivo_actual}! Continuando pedido con él...")
-                        podridos_platillo_chef += 1
-                        ingrediente_podrido = True
-                        podrido_flash_until = ahora + 1500  # Mostrar indicador 1.5s
-                        # Antes se reinsertaba para recoger de nuevo, ahora el chef se lo queda.
-                    else:
-                        print(f"Ingrediente fresco recogido en {objetivo_actual}.")
-
-                if objetivo_actual in ENTREGAS:
-                    tiempo_platillo_seg = max(0.0, (ahora - inicio_platillo_chef) / 1000.0) if inicio_platillo_chef else 0.0
-                    puntaje_comida = calcular_puntaje_comida(ingredientes_platillo_chef, podridos_platillo_chef)
-                    puntaje_limpieza = calcular_limpieza_por_platos(platos_sucios, len(temporizadores_sucios), capacidad=3)
-                    evaluacion_propina = evaluar_propina_difusa(tiempo_platillo_seg, puntaje_comida, puntaje_limpieza)
-                    limpieza_txt = limpieza_a_palabra(puntaje_limpieza)
-                    monedas_propina = int(round(evaluacion_propina['propina']))
-
-                    entregas_chef += 1
-                    propinas_totales_monedas += monedas_propina
-                    acumulado_comida += puntaje_comida
-                    acumulado_limpieza += puntaje_limpieza
-                    acumulado_tiempo += tiempo_platillo_seg
-                    acumulado_podridos += podridos_platillo_chef
-                    acumulado_ingredientes += ingredientes_platillo_chef
-
-                    registrar_entrega(ahora)
-                    print(
-                        "Pedido entregado. "
-                        f"Comida={puntaje_comida:.2f}/5 (podridos {podridos_platillo_chef}/{ingredientes_platillo_chef}), "
-                        f"Tiempo={tiempo_platillo_seg:.1f}s, Limpieza={limpieza_txt}, "
-                        f"Propina={monedas_propina} monedas"
-                    )
-                    resumen_entrega = (
-                        f"Comida={puntaje_comida:.2f}/5 | Podridos {podridos_platillo_chef}/{ingredientes_platillo_chef} | "
-                        f"Tiempo={tiempo_platillo_seg:.1f}s | Limpieza={limpieza_txt} | Propina={monedas_propina} monedas"
-                    )
-                    resumen_entrega_until = ahora + 9000
-
-                    ingredientes_platillo_chef = 0
-                    podridos_platillo_chef = 0
-                    inicio_platillo_chef = 0
-
-                if objetivo_actual in TIEMPOS_ESPERA:
-                    esperando_accion = True
-                    inicio_espera = ahora
-                    tiempo_espera_actual = TIEMPOS_ESPERA[objetivo_actual]
-                    ruta_disponible = []
-                    ruta_objetivo = None
-                    contador_frames = 0
-                    print(f"Esperando {tiempo_espera_actual/1000}s en {objetivo_actual}...")
-                    break 
-                else:
-                    index_objetivo += 1
-                    if index_objetivo < len(lista_objetivos):
-                        objetivo_actual = lista_objetivos[index_objetivo]
-                        ruta_disponible = []
-                        ruta_objetivo = None
-                        contador_frames = 0
-                    else:
-                        objetivo_actual = None
-                        print("Todos los pedidos completados.")
-            if objetivo_actual is not None and not es_objetivo_valido(objetivo_actual):
-                print(f"Objetivo invalido ({objetivo_actual}), se omite.")
-                index_objetivo += 1
-                ruta_objetivo = None
-                ruta_disponible = []
-                continue
-            if (
-                not lavando_plato
-                and objetivo_actual is not None
-                and (ruta_objetivo != objetivo_actual or not ruta_disponible)
-            ):
-                # Bloquear posición actual del interceptor temporalmente
-                ix, iy = interceptor.pos
-                val_original = mapa_actual[iy][ix]
-                if tuple(interceptor.pos) != objetivo_actual:
-                    mapa_actual[iy][ix] = 0
-                pathfinder.set_matrix(mapa_actual)
-
-                ruta_disponible = pathfinder.obtener_ruta(chef_pos, objetivo_actual)
-
-                # Fallback: intentar sin bloquear si no hubo ruta
-                if not ruta_disponible and val_original == 1 and tuple(interceptor.pos) != objetivo_actual:
-                    mapa_actual[iy][ix] = 1
-                    pathfinder.set_matrix(mapa_actual)
-                    ruta_disponible = pathfinder.obtener_ruta(chef_pos, objetivo_actual)
-
-                # Siempre restaurar el valor original
-                mapa_actual[iy][ix] = val_original
-                pathfinder.set_matrix(mapa_actual)
-
-                ruta_objetivo = objetivo_actual
-                contador_frames = 0
-
-                if not ruta_disponible and tuple(chef_pos) != objetivo_actual:
-                    print(f"Objetivo inalcanzable, saltando: {objetivo_actual}")
-                    index_objetivo += 1
-                    ruta_objetivo = None
-                    ruta_disponible = []
-
-                 
-        
-            if ruta_disponible and not lavando_plato:
-                contador_frames += 1
-                velcodad_actual = VELOCIDAD_MOVIMIENTO
-                if tuple(chef_pos) in zona_lenta:
-                    velcodad_actual = VELOCIDAD_MOVIMIENTO * 3
-                if contador_frames >= velcodad_actual and ahora >= chef_freeze_until:
-                    siguiente_paso = ruta_disponible[0]
-
-                    # Recálculo dinámico si el interceptor está en el siguiente paso
-                    if list(siguiente_paso) == interceptor.pos:
-                        ruta_disponible = []
-                        contador_frames = 0
-                    else:
-                        siguiente_paso = ruta_disponible.pop(0)
-
-                        # Determinar dirección
-                        if siguiente_paso[0] > chef_pos[0]:
-                            chef_direccion = 2  # Derecha
-                        elif siguiente_paso[0] < chef_pos[0]:
-                            chef_direccion = 3  # Izquierda
-                        elif siguiente_paso[1] < chef_pos[1]:
-                            chef_direccion = 1  # Arriba
-                        elif siguiente_paso[1] > chef_pos[1]:
-                            chef_direccion = 0  # Abajo
-
-                        chef_pos[0], chef_pos[1] = siguiente_paso[0], siguiente_paso[1]
-                        contador_frames = 0
-
-                    if not ruta_disponible:
-                        print(f"Destino: {chef_pos}")
-                        if objetivo_actual is not None and tuple(chef_pos) == objetivo_actual:
-                            ruta_objetivo = None
+            if str_entrega:
+                resumen_entrega = str_entrega
+                resumen_entrega_until = ahora + duration_entrega
 
             # Interceptor update (mueve y devuelve eventos)
             eventos = interceptor.update(
                 ahora,
-                chef_pos,
-                ruta_disponible,
+                chef.pos,
+                chef.ruta_disponible,
                 mapa_actual,
                 lista_objetivos_interceptor,
                 zona_lenta,
                 tiempo_lavado_ms,
                 VELOCIDAD_MOVIMIENTO,
                 TIEMPOS_ESPERA,
-                ruta_objetivo,            # <-- olla que el chef tiene como objetivo actual
+                chef.ruta_objetivo,            # <-- olla que el chef tiene como objetivo actual
             )
 
             ruta_interceptor = interceptor.ruta
             interceptor_pos = interceptor.pos
 
             if 'freeze_until' in eventos:
-                chef_freeze_until = eventos['freeze_until']
+                chef.freeze_until = eventos['freeze_until']
                 print("Interceptor adjacent: congelando al chef")
                 # Pausar temporizadores del chef durante la congelación (no cancelarlos)
-                freeze_dur = chef_freeze_until - ahora
-                if esperando_accion:
-                    inicio_espera += freeze_dur
+                freeze_dur = chef.freeze_until - ahora
+                if chef.esperando_accion:
+                    chef.inicio_espera += freeze_dur
                     print("Pausando progreso de espera del chef durante la congelación.")
-                if lavando_plato:
-                    inicio_lavado += freeze_dur
+                if chef.lavando_plato:
+                    chef.inicio_lavado += freeze_dur
                     print("Pausando progreso de lavado del chef durante la congelación.")
 
             if 'arrived' in eventos:
@@ -663,17 +445,17 @@ class GameScene:
                     print(f"Interceptor esperando {TIEMPOS_ESPERA[objetivo_interceptor]/1000}s en {objetivo_interceptor}...")
                 else:
                     if objetivo_interceptor == objetivo_platos_sucios:
-                        if platos_sucios > 0:
-                            platos_sucios -= 1
-                            print(f"Interceptor recogió plato sucio en {objetivo_interceptor}. Sucios restantes: {platos_sucios}")
+                        if kitchen.platos_sucios > 0:
+                            kitchen.platos_sucios -= 1
+                            print(f"Interceptor recogió plato sucio en {objetivo_interceptor}. Sucios restantes: {kitchen.platos_sucios}")
                             interceptor.advance_objetivo()
                     elif objetivo_interceptor == objetivo_lavado:
                         interceptor.start_washing(ahora)
                         print("Interceptor lavando plato...")
                     elif objetivo_interceptor in PLATOS:
-                        if platos_limpios > 0:
-                            platos_limpios -= 1
-                            print(f"Interceptor tomó plato limpio en {objetivo_interceptor}. Platos limpios restantes: {platos_limpios}")
+                        if kitchen.platos_limpios > 0:
+                            kitchen.platos_limpios -= 1
+                            print(f"Interceptor tomó plato limpio en {objetivo_interceptor}. Platos limpios restantes: {kitchen.platos_limpios}")
                             interceptor.advance_objetivo()
                     elif objetivo_interceptor in ENTREGAS:
                         registrar_entrega(ahora)
@@ -694,38 +476,31 @@ class GameScene:
 
                     if objetivo_interceptor in ENTREGAS:
                         tiempo_platillo_seg_int = max(0.0, (ahora - inicio_platillo_interceptor) / 1000.0) if inicio_platillo_interceptor else 0.0
-                        puntaje_comida_int = calcular_puntaje_comida(ingredientes_platillo_interceptor, podridos_platillo_interceptor)
-                        puntaje_limpieza_int = calcular_limpieza_por_platos(platos_sucios, len(temporizadores_sucios), capacidad=3)
-                        evaluacion_propina_int = evaluar_propina_difusa(tiempo_platillo_seg_int, puntaje_comida_int, puntaje_limpieza_int)
-                        limpieza_txt_int = limpieza_a_palabra(puntaje_limpieza_int)
-                        monedas_propina_int = int(round(evaluacion_propina_int['propina']))
-
+                        
+                        monedas_propina_int, resumen_entrega, puntaje_comida_int, limpieza_txt_int = kitchen.entregar_pedido(
+                            tiempo_platillo_seg_int, ingredientes_platillo_interceptor, podridos_platillo_interceptor
+                        )
+                        
                         entregas_interceptor += 1
-                        propinas_totales_monedas += monedas_propina_int
-                        acumulado_comida += puntaje_comida_int
-                        acumulado_limpieza += puntaje_limpieza_int
-                        acumulado_tiempo += tiempo_platillo_seg_int
-                        acumulado_podridos += podridos_platillo_interceptor
-                        acumulado_ingredientes += ingredientes_platillo_interceptor
-
-                        print(
-                            "Entrega interceptor. "
-                            f"Comida={puntaje_comida_int:.2f}/5 (podridos {podridos_platillo_interceptor}/{ingredientes_platillo_interceptor}), "
-                            f"Tiempo={tiempo_platillo_seg_int:.1f}s, Limpieza={limpieza_txt_int}, "
-                            f"Propina={monedas_propina_int} monedas"
-                        )
-                        resumen_entrega = (
-                            f"Comida={puntaje_comida_int:.2f}/5 | Podridos {podridos_platillo_interceptor}/{ingredientes_platillo_interceptor} | "
-                            f"Tiempo={tiempo_platillo_seg_int:.1f}s | Limpieza={limpieza_txt_int} | Propina={monedas_propina_int} monedas"
-                        )
+                        kitchen.registrar_entrega(ahora, 10000)
+                        
                         resumen_entrega_until = ahora + 9000
                         ingredientes_platillo_interceptor = 0
                         podridos_platillo_interceptor = 0
                         inicio_platillo_interceptor = 0
 
             if 'washer_done' in eventos:
-                platos_limpios += 1
-                print(f"Interceptor completó lavado. Platos limpios disponibles: {platos_limpios}")
+                kitchen.platos_limpios += 1
+                print(f"Interceptor completó lavado. Platos limpios disponibles: {kitchen.platos_limpios}")
+
+            for evento in pygame.event.get():
+                if evento.type == pygame.QUIT:
+                    return False
+                if evento.type == pygame.KEYDOWN:
+                    if evento.key == pygame.K_ESCAPE:
+                        return False
+                    if evento.key == pygame.K_r:
+                        return True
 
             # preparar datos visuales del interceptor para el renderer
             interceptor_lavando = interceptor.lavando
@@ -739,31 +514,24 @@ class GameScene:
                 ANCHO_GRID,
                 ALTO_GRID,
                 mapa_actual,
-                chef_pos,
-                ruta_disponible,
+                chef,
+                kitchen,
                 zonas_olor,
                 pozo_descubierto,
                 pozos_pos,
                 pisos_lentos,
-                platos_limpios,
-                platos_sucios,
-                lavando_plato,
-                progreso_lavado,
                 interceptor_pos,
                 ruta_interceptor,
                 interceptor_lavando,
                 interceptor_progreso_lavado,
                 interceptor_esperando,
                 interceptor_progreso_espera,
-                esperando_accion,  # <- NUEVO
-                progreso_espera,   # <- NUEVO
-                chef_freeze_until,
                 ahora,
                 ('freeze_until' in eventos),
                 self.map_surface,
                 self.img_pozo,
                 self.img_piso_mojado,
-                self.img_chef_dir[chef_direccion],
+                self.img_chef_dir[chef.direccion],
                 self.img_interceptor_dir[interceptor.direccion],
                 ingrediente_podrido,
                 tiempo_restante_ms,
